@@ -1,11 +1,12 @@
 package com.seguridad.Messenger.usuario.repository;
 
 import com.seguridad.Messenger.usuario.model.Usuario;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,6 +20,15 @@ public interface UsuarioRepository extends JpaRepository<Usuario, UUID> {
 
     boolean existsByUsername(String username);
 
-    @Query("SELECT u FROM Usuario u WHERE LOWER(u.username) LIKE LOWER(CONCAT('%', :q, '%')) AND u.activo = true")
-    List<Usuario> buscarPorUsername(@Param("q") String q);
+    @Query("""
+            SELECT u FROM Usuario u
+            JOIN FETCH u.persona p
+            WHERE u.activo = true
+              AND (
+                LOWER(u.username)   LIKE LOWER(CONCAT('%', :q, '%'))
+                OR LOWER(p.nombres)  LIKE LOWER(CONCAT('%', :q, '%'))
+                OR LOWER(p.apellidos) LIKE LOWER(CONCAT('%', :q, '%'))
+              )
+            """)
+    Page<Usuario> buscar(@Param("q") String q, Pageable pageable);
 }

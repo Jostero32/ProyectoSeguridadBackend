@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import org.springframework.data.domain.Page;
 import java.util.UUID;
 
 @RequiredArgsConstructor
@@ -87,11 +87,13 @@ public class UsuarioController {
     }
 
     @GetMapping("/buscar")
-    @Operation(summary = "Buscar usuarios por username (contains, case insensitive)")
+    @Operation(summary = "Buscar usuarios por username, nombre o apellido (contains, case insensitive)")
     @SecurityRequirement(name = "BearerAuth")
-    @ApiResponse(responseCode = "200", description = "Resultados de búsqueda")
-    public ResponseEntity<List<PerfilResponse>> buscar(
-            @Parameter(description = "Texto a buscar en el username") @RequestParam String q) {
-        return ResponseEntity.ok(usuarioService.buscarPorUsername(q));
+    @ApiResponse(responseCode = "200", description = "Resultados de búsqueda paginados")
+    public ResponseEntity<Page<PerfilResponse>> buscar(
+            @Parameter(description = "Texto a buscar en username, nombre o apellido") @RequestParam String q,
+            @Parameter(description = "Número de página (0-based)") @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Tamaño de página") @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(usuarioService.buscar(q, page, size));
     }
 }

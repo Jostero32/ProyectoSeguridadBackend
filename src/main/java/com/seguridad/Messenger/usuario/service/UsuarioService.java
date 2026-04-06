@@ -10,12 +10,13 @@ import com.seguridad.Messenger.usuario.model.PerfilUsuario;
 import com.seguridad.Messenger.usuario.model.Usuario;
 import com.seguridad.Messenger.usuario.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 @RequiredArgsConstructor
@@ -75,10 +76,9 @@ public class UsuarioService {
         return construirPerfilResponse(usuario, true);
     }
 
-    public List<PerfilResponse> buscarPorUsername(String query) {
-        return usuarioRepository.buscarPorUsername(query).stream()
-                .map(u -> construirPerfilResponse(u, false))
-                .toList();
+    public Page<PerfilResponse> buscar(String query, int page, int size) {
+        return usuarioRepository.buscar(query, PageRequest.of(page, size))
+                .map(u -> construirPerfilResponse(u, false));
     }
 
     private PerfilResponse construirPerfilResponse(Usuario usuario, boolean esPropio) {
