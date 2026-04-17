@@ -42,4 +42,11 @@ public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
             @Param("conversacionId") UUID conversacionId,
             @Param("usuarioId") UUID usuarioId,
             @Param("mensajeIds") List<UUID> mensajeIds);
+
+    /**
+     * Devuelve solo el remitenteId de un mensaje — usado por el broadcast de estado de entrega
+     * para saber a qué usuario enviar la notificación vía /user/queue/notificaciones.
+     */
+    @Query("SELECT m.remitenteId FROM Mensaje m WHERE m.id = :mensajeId")
+    UUID findRemitenteId(@Param("mensajeId") UUID mensajeId);
 }

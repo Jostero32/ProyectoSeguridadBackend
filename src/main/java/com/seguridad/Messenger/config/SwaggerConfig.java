@@ -24,17 +24,26 @@ public class SwaggerConfig {
                                 **Endpoint:** `ws://localhost:8080/ws` (con fallback SockJS en `/ws`)
                                 **Autenticación:** header `Authorization: Bearer {token}` en el frame STOMP CONNECT
 
-                                ### Suscripciones disponibles (v1)
-                                | Destino | Descripción |
-                                |---------|-------------|
-                                | `/topic/conversacion.{conversacionId}` | Mensajes nuevos de esa conversación |
-                                | `/user/queue/notificaciones` | Eventos privados del usuario autenticado |
+                                ### Suscripciones disponibles (v1 + v2)
+
+                                **`/topic/conversacion.{conversacionId}`** — eventos de la conversación:
+                                | Tipo | Descripción |
+                                |------|-------------|
+                                | `NUEVO_MENSAJE` | Nuevo mensaje enviado o reenviado |
+                                | `NUEVA_REACCION` | Alguien reaccionó a un mensaje |
+                                | `REACCION_ELIMINADA` | Alguien quitó su reacción |
+
+                                **`/user/queue/notificaciones`** — eventos privados del usuario autenticado:
+                                | Tipo | Descripción |
+                                |------|-------------|
+                                | `ESTADO_ENTREGA` | Tu mensaje fue entregado o leído por alguien |
 
                                 ### Formato de todos los eventos
                                 ```json
-                                { "tipo": "NUEVO_MENSAJE", "payload": { ...MensajeResponse } }
+                                { "tipo": "NUEVO_MENSAJE|NUEVA_REACCION|REACCION_ELIMINADA|ESTADO_ENTREGA",
+                                  "payload": { ...según tipo } }
                                 ```
-                                Tipos definidos: `NUEVO_MENSAJE`, `NUEVA_REACCION`, `ESTADO_ENTREGA`, `ESCRIBIENDO`, `PRESENCIA`
+                                Próximos tipos: `ESCRIBIENDO`, `PRESENCIA`
                                 """))
                 .addSecurityItem(new SecurityRequirement().addList("BearerAuth"))
                 .components(new Components()

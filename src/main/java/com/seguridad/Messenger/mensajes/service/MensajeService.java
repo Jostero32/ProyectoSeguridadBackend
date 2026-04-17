@@ -16,7 +16,11 @@ import com.seguridad.Messenger.mensajes.repository.ReaccionRepository;
 import com.seguridad.Messenger.shared.enums.TipoMensaje;
 import com.seguridad.Messenger.shared.exception.AccesoDenegadoException;
 import com.seguridad.Messenger.shared.exception.RecursoNoEncontradoException;
+import com.seguridad.Messenger.websocket.dto.EstadoEntregaEventPayload;
+import com.seguridad.Messenger.websocket.dto.ReaccionEventPayload;
+import com.seguridad.Messenger.websocket.event.EstadoEntregaEvent;
 import com.seguridad.Messenger.websocket.event.MensajeEnviadoEvent;
+import com.seguridad.Messenger.websocket.event.ReaccionEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -138,6 +142,11 @@ public class MensajeService {
             estadoMensajeRepository.saveAll(estados);
         }
 
+        // Notificar al remitente cuando cada receptor recibe el mensaje (entregado)
+        receptores.forEach(receptorId -> eventPublisher.publishEvent(new EstadoEntregaEvent(
+                new EstadoEntregaEventPayload(mensajeFinal.getId(), conversacionId, receptorId, ahora, null)
+        )));
+
         MensajeResponse response = toResponse(mensajeFinal, usuarioId, conversacionId);
         eventPublisher.publishEvent(new MensajeEnviadoEvent(response));
         return response;
@@ -238,6 +247,11 @@ public class MensajeService {
         if (!nuevos.isEmpty()) {
             estadoMensajeRepository.saveAll(nuevos);
         }
+
+        // Notificar al remitente de cada mensaje que fue leído
+        validIds.forEach(id -> eventPublisher.publishEvent(new EstadoEntregaEvent(
+                new EstadoEntregaEventPayload(id, conversacionId, usuarioId, null, ahora)
+        )));
     }
 
     // ─── Historial paginado ───────────────────────────────────────────────────
@@ -264,8 +278,15 @@ public class MensajeService {
 
         reaccionRepository.upsert(mensajeId, usuarioId, req.emoji(), LocalDateTime.now());
 
-        // Leer el estado actualizado directamente del repositorio (el upsert fue nativo)
-        return construirResumenReacciones(reaccionRepository.findByMensajeId(mensajeId), usuarioId);
+        List<ResumenReaccionesResponse> resumen =
+                construirResumenReacciones(reaccionRepository.findByMensajeId(mensajeId), usuarioId);
+
+        eventPublisher.publishEvent(new ReaccionEvent(
+                "NUEVA_REACCION",
+                new ReaccionEventPayload(mensajeId, conversacionId, usuarioId, req.emoji(), resumen)
+        ));
+
+        return resumen;
     }
 
     // ─── Quitar reacción ──────────────────────────────────────────────────────
@@ -281,6 +302,14 @@ public class MensajeService {
             throw new RecursoNoEncontradoException("No tienes una reacción en este mensaje");
         }
         reaccionRepository.deleteById(reaccionId);
+
+        List<ResumenReaccionesResponse> resumen =
+                construirResumenReacciones(reaccionRepository.findByMensajeId(mensajeId), usuarioId);
+
+        eventPublisher.publishEvent(new ReaccionEvent(
+                "REACCION_ELIMINADA",
+                new ReaccionEventPayload(mensajeId, conversacionId, usuarioId, null, resumen)
+        ));
     }
 
     // ─── Listar reacciones detalladas ─────────────────────────────────────────
