@@ -35,6 +35,19 @@ public interface ParticipanteRepository extends JpaRepository<Participante, Part
     List<Participante> findByIdConversacionIdConUsuario(@Param("conversacionId") UUID conversacionId);
 
     /**
+     * Devuelve solo los IDs de usuario de los participantes de una conversación, excluyendo a uno.
+     * Usado por el módulo de mensajería para crear los Estado_Mensaje al enviar un mensaje.
+     */
+    @Query("""
+            SELECT p.id.usuarioId FROM Participante p
+            WHERE p.id.conversacionId = :conversacionId
+              AND p.id.usuarioId != :excludeId
+            """)
+    List<UUID> findUsuarioIdsByConversacionExcluyendo(
+            @Param("conversacionId") UUID conversacionId,
+            @Param("excludeId") UUID excludeId);
+
+    /**
      * Devuelve los miembros de una conversación excluyendo a un usuario, ordenados por fecha_union ASC.
      * Usado para promover al miembro más antiguo cuando el último admin abandona.
      */

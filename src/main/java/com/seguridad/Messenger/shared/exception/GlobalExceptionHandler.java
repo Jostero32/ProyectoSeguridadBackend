@@ -1,5 +1,6 @@
 package com.seguridad.Messenger.shared.exception;
 
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -51,5 +52,21 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> manejarIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse("BAD_REQUEST", ex.getMessage(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> manejarIllegalState(IllegalStateException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("OPERACION_INVALIDA", ex.getMessage(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> manejarConstraintViolation(ConstraintViolationException ex) {
+        String mensaje = ex.getConstraintViolations().stream()
+                .map(v -> v.getPropertyPath() + ": " + v.getMessage())
+                .reduce((a, b) -> a + "; " + b)
+                .orElse("Parámetro inválido");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse("VALIDATION_ERROR", mensaje, LocalDateTime.now()));
     }
 }
