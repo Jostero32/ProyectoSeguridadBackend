@@ -3,9 +3,11 @@ package com.seguridad.Messenger.mensajes.service;
 import com.seguridad.Messenger.conversacion.repository.ConversacionRepository;
 import com.seguridad.Messenger.conversacion.repository.ParticipanteRepository;
 import com.seguridad.Messenger.mensajes.dto.*;
+import com.seguridad.Messenger.mensajes.model.ArchivoMultimedia;
 import com.seguridad.Messenger.mensajes.model.EstadoMensaje;
 import com.seguridad.Messenger.mensajes.model.EstadoMensajeId;
 import com.seguridad.Messenger.mensajes.model.Mensaje;
+import com.seguridad.Messenger.mensajes.model.UbicacionMensaje;
 import com.seguridad.Messenger.mensajes.repository.EstadoMensajeRepository;
 import com.seguridad.Messenger.mensajes.repository.MensajeRepository;
 import com.seguridad.Messenger.shared.enums.TipoMensaje;
@@ -16,7 +18,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -32,23 +36,44 @@ public class MensajeService {
     private final EstadoMensajeRepository estadoMensajeRepository;
     private final ConversacionRepository conversacionRepository;
     private final ParticipanteRepository participanteRepository;
+    private final StorageService storageService;
 
     // ─── Enviar ───────────────────────────────────────────────────────────────
 
-    public MensajeResponse enviarMensaje(UUID conversacionId, UUID usuarioId, EnviarMensajeRequest req) {
+    public MensajeResponse enviarMensaje(UUID conversacionId, UUID usuarioId,
+                                         TipoMensaje tipo,
+                                         String contenido,
+                                         UUID respuestaMensajeId,
+                                         MultipartFile archivo,
+                                         Integer duracionSegundos,
+                                         Integer anchoPx,
+                                         Integer altoPx,
+                                         BigDecimal latitud,
+                                         BigDecimal longitud,
+                                         String nombreLugar) {
         verificarParticipante(conversacionId, usuarioId);
 
+        // Validar coherencia tipo / payload
+        if (tipo == TipoMensaje.TEXTO && (contenido == null || contenido.isBlank())) {
+            throw new IllegalArgumentException("El contenido es obligatorio para mensajes de tipo TEXTO");
+        }
+        if (tipo == TipoMensaje.UBICACION && (latitud == null || longitud == null)) {
+            throw new IllegalArgumentException("latitud y longitud son obligatorios para mensajes de tipo UBICACION");
+        }
+        if (tipo != TipoMensaje.TEXTO && tipo != TipoMensaje.UBICACION && (archivo == null || archivo.isEmpty())) {
+            throw new IllegalArgumentException("El archivo es obligatorio para mensajes de tipo " + tipo);
+        }
+
+        // Mensaje al que responde
         Mensaje respuestaMensaje = null;
-        if (req.respuestaMensajeId() != null) {
-            respuestaMensaje = mensajeRepository.findById(req.respuestaMensajeId())
+        if (respuestaMensajeId != null) {
+            respuestaMensaje = mensajeRepository.findById(respuestaMensajeId)
                     .orElseThrow(() -> new RecursoNoEncontradoException("Mensaje de respuesta no encontrado"));
             if (!respuestaMensaje.getConversacion().getId().equals(conversacionId)) {
-                throw new RecursoNoEncontradoException(
-                        "El mensaje de respuesta no pertenece a esta conversación");
+                throw new RecursoNoEncontradoException("El mensaje de respuesta no pertenece a esta conversación");
             }
             if (respuestaMensaje.isEliminadoParaTodos()) {
-                throw new IllegalStateException(
-                        "No se puede responder a un mensaje eliminado para todos");
+                throw new IllegalStateException("No se puede responder a un mensaje eliminado para todos");
             }
         }
 
@@ -56,13 +81,45 @@ public class MensajeService {
         mensaje.setConversacion(conversacionRepository.getReferenceById(conversacionId));
         mensaje.setRemitenteId(usuarioId);
         mensaje.setRespuestaMensaje(respuestaMensaje);
-        mensaje.setTipo(TipoMensaje.TEXTO);
-        mensaje.setContenidoCifrado(req.contenido());
+        mensaje.setTipo(tipo);
         mensaje.setCreadoEn(LocalDateTime.now());
         mensaje.setEliminadoParaTodos(false);
+
+        if (tipo == TipoMensaje.TEXTO) {
+            mensaje.setContenidoCifrado(contenido);
+        }
+
         final Mensaje mensajeGuardado = mensajeRepository.save(mensaje);
 
-        // Crear Estado_Mensaje para cada participante excepto el remitente
+        // Archivo multimedia
+        if (tipo != TipoMensaje.TEXTO && tipo != TipoMensaje.UBICACION) {
+            StorageService.StorageResult result = storageService.subir(archivo, tipo);
+            ArchivoMultimedia am = new ArchivoMultimedia();
+            am.setMensaje(mensajeGuardado);
+            am.setNombreOriginal(archivo.getOriginalFilename() != null ? archivo.getOriginalFilename() : "archivo");
+            am.setObjectKey(result.objectKey());
+            am.setContentType(result.contentType());
+            am.setTamanioBytes(result.tamanioBytes());
+            am.setDuracionSegundos(duracionSegundos);
+            am.setAnchoPx(anchoPx);
+            am.setAltoPx(altoPx);
+            mensajeGuardado.setArchivo(am);
+        }
+
+        // Ubicación
+        if (tipo == TipoMensaje.UBICACION) {
+            UbicacionMensaje ub = new UbicacionMensaje();
+            ub.setMensaje(mensajeGuardado);
+            ub.setLatitud(latitud);
+            ub.setLongitud(longitud);
+            ub.setNombreLugar(nombreLugar);
+            mensajeGuardado.setUbicacion(ub);
+        }
+
+        // Guardar archivo/ubicación vía cascada re-saving el mensaje
+        final Mensaje mensajeFinal = mensajeRepository.save(mensajeGuardado);
+
+        // Estado_Mensaje para cada participante receptor
         LocalDateTime ahora = LocalDateTime.now();
         List<UUID> receptores = participanteRepository
                 .findUsuarioIdsByConversacionExcluyendo(conversacionId, usuarioId);
@@ -70,7 +127,7 @@ public class MensajeService {
         List<EstadoMensaje> estados = receptores.stream()
                 .map(receptorId -> {
                     EstadoMensaje e = new EstadoMensaje();
-                    e.setId(new EstadoMensajeId(mensajeGuardado.getId(), receptorId));
+                    e.setId(new EstadoMensajeId(mensajeFinal.getId(), receptorId));
                     e.setEntregadoEn(ahora);
                     return e;
                 })
@@ -80,7 +137,7 @@ public class MensajeService {
             estadoMensajeRepository.saveAll(estados);
         }
 
-        return toResponse(mensajeGuardado, usuarioId, conversacionId);
+        return toResponse(mensajeFinal, usuarioId, conversacionId);
     }
 
     // ─── Editar ───────────────────────────────────────────────────────────────
@@ -121,13 +178,15 @@ public class MensajeService {
 
         if ("para_todos".equals(tipo)) {
             if (!mensaje.getRemitenteId().equals(usuarioId)) {
-                throw new AccesoDenegadoException(
-                        "Solo el remitente puede eliminar el mensaje para todos");
+                throw new AccesoDenegadoException("Solo el remitente puede eliminar el mensaje para todos");
+            }
+            // Eliminar archivo de MinIO si existe
+            if (mensaje.getArchivo() != null) {
+                storageService.eliminar(mensaje.getArchivo().getObjectKey());
             }
             mensaje.setEliminadoEn(ahora);
             mensaje.setEliminadoParaTodos(true);
         } else {
-            // para_mi: cualquier participante puede eliminar para sí mismo
             mensaje.setEliminadoEn(ahora);
             mensaje.setEliminadoParaTodos(false);
         }
@@ -142,7 +201,6 @@ public class MensajeService {
 
         List<UUID> mensajeIds = req.mensajeIds();
 
-        // Filtrar mensajes válidos: pertenecen a la conversación y no fueron enviados por el usuario
         List<Mensaje> mensajesValidos = mensajeRepository.findValidosParaLeer(
                 conversacionId, usuarioId, mensajeIds);
 
@@ -156,10 +214,8 @@ public class MensajeService {
 
         LocalDateTime ahora = LocalDateTime.now();
 
-        // Bulk update de filas existentes
         estadoMensajeRepository.marcarLeidoBulk(validIds, usuarioId, ahora);
 
-        // Crear filas inexistentes
         Set<UUID> existentes = estadoMensajeRepository
                 .findByMensajeIdsAndUsuarioId(validIds, usuarioId)
                 .stream()
@@ -206,18 +262,16 @@ public class MensajeService {
 
     private void verificarMensajeEnConversacion(Mensaje mensaje, UUID conversacionId) {
         if (!mensaje.getConversacion().getId().equals(conversacionId)) {
-            throw new RecursoNoEncontradoException(
-                    "El mensaje no pertenece a esta conversación");
+            throw new RecursoNoEncontradoException("El mensaje no pertenece a esta conversación");
         }
     }
 
     private MensajeResponse toResponse(Mensaje mensaje, UUID usuarioId, UUID conversacionId) {
-        // Visibilidad del contenido según estado de eliminación
+        // Visibilidad del contenido
         String contenido;
         if (mensaje.isEliminadoParaTodos()) {
             contenido = null;
         } else if (mensaje.getEliminadoEn() != null) {
-            // Eliminado "para mí": solo el remitente (quien realizó la acción) lo ve como null
             contenido = mensaje.getRemitenteId().equals(usuarioId) ? null : mensaje.getContenidoCifrado();
         } else {
             contenido = mensaje.getContenidoCifrado();
@@ -225,7 +279,7 @@ public class MensajeService {
 
         boolean eliminado = mensaje.getEliminadoEn() != null;
 
-        // Mensaje al que responde (si aplica)
+        // Mensaje al que responde
         RepliedMessageResponse respuesta = null;
         if (mensaje.getRespuestaMensaje() != null) {
             Mensaje original = mensaje.getRespuestaMensaje();
@@ -248,6 +302,28 @@ public class MensajeService {
                     .collect(Collectors.toList());
         }
 
+        // Archivo multimedia
+        ArchivoMultimediaResponse archivoResp = null;
+        if (mensaje.getArchivo() != null && !mensaje.isEliminadoParaTodos()) {
+            ArchivoMultimedia am = mensaje.getArchivo();
+            archivoResp = new ArchivoMultimediaResponse(
+                    storageService.urlPublica(am.getObjectKey()),
+                    am.getNombreOriginal(),
+                    am.getContentType(),
+                    am.getTamanioBytes(),
+                    am.getDuracionSegundos(),
+                    am.getAnchoPx(),
+                    am.getAltoPx()
+            );
+        }
+
+        // Ubicación
+        UbicacionResponse ubicacionResp = null;
+        if (mensaje.getUbicacion() != null) {
+            UbicacionMensaje ub = mensaje.getUbicacion();
+            ubicacionResp = new UbicacionResponse(ub.getLatitud(), ub.getLongitud(), ub.getNombreLugar());
+        }
+
         return new MensajeResponse(
                 mensaje.getId(),
                 conversacionId,
@@ -259,7 +335,9 @@ public class MensajeService {
                 eliminado,
                 mensaje.isEliminadoParaTodos(),
                 respuesta,
-                estados
+                estados,
+                archivoResp,
+                ubicacionResp
         );
     }
 }

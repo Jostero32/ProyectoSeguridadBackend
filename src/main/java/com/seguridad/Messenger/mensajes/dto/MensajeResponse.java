@@ -41,6 +41,12 @@ public record MensajeResponse(
         RepliedMessageResponse respuestaMensaje,
 
         @Schema(description = "Estados de entrega y lectura por receptor. Solo se incluye cuando el usuario autenticado es el remitente.")
-        List<EstadoMensajeResponse> estados
+        List<EstadoMensajeResponse> estados,
+
+        @Schema(description = "Archivo multimedia adjunto. Null si el mensaje no tiene archivo.")
+        ArchivoMultimediaResponse archivo,
+
+        @Schema(description = "Ubicación geográfica. Null si el mensaje no es de tipo UBICACION.")
+        UbicacionResponse ubicacion
 
 ) {}

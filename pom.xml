@@ -112,7 +112,14 @@
 <dependency>
     <groupId>io.minio</groupId>
     <artifactId>minio</artifactId>
-    <version>8.5.7</version>
+    <version>8.5.9</version>
+</dependency>
+
+<!-- Apache Tika — detección real de MIME type -->
+<dependency>
+    <groupId>org.apache.tika</groupId>
+    <artifactId>tika-core</artifactId>
+    <version>2.9.2</version>
 </dependency>
 
 <!-- Swagger / OpenAPI -->

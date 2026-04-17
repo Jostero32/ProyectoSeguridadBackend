@@ -49,4 +49,10 @@ public class Mensaje {
 
     @Column(name = "eliminado_para_todos", nullable = false)
     private boolean eliminadoParaTodos = false;
+
+    @OneToOne(mappedBy = "mensaje", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private ArchivoMultimedia archivo;
+
+    @OneToOne(mappedBy = "mensaje", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private UbicacionMensaje ubicacion;
 }

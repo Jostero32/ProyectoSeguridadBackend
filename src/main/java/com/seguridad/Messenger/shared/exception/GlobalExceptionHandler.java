@@ -8,6 +8,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.LocalDateTime;
 
@@ -68,5 +69,23 @@ public class GlobalExceptionHandler {
                 .orElse("Parámetro inválido");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse("VALIDATION_ERROR", mensaje, LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(TipoArchivoNoPermitidoException.class)
+    public ResponseEntity<ErrorResponse> manejarTipoNoPermitido(TipoArchivoNoPermitidoException ex) {
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(new ErrorResponse("TIPO_NO_PERMITIDO", ex.getMessage(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(ArchivoDemasiadoGrandeException.class)
+    public ResponseEntity<ErrorResponse> manejarArchivoGrande(ArchivoDemasiadoGrandeException ex) {
+        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
+                .body(new ErrorResponse("ARCHIVO_DEMASIADO_GRANDE", ex.getMessage(), LocalDateTime.now()));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> manejarMaxUploadSize(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
+                .body(new ErrorResponse("ARCHIVO_DEMASIADO_GRANDE", "El archivo supera el tamaño máximo permitido", LocalDateTime.now()));
     }
 }
