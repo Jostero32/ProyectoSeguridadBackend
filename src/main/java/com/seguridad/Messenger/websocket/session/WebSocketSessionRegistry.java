@@ -1,48 +1,111 @@
 package com.seguridad.Messenger.websocket.session;
 
+import com.seguridad.Messenger.shared.enums.PrivacidadUltimoVisto;
+import com.seguridad.Messenger.usuario.model.PerfilUsuario;
+import com.seguridad.Messenger.usuario.repository.ContactoRepository;
+import com.seguridad.Messenger.usuario.repository.PerfilUsuarioRepository;
+import com.seguridad.Messenger.usuario.repository.UsuarioRepository;
+import com.seguridad.Messenger.websocket.dto.PresenciaPayload;
+import com.seguridad.Messenger.websocket.dto.WebSocketEvent;
+import com.seguridad.Messenger.websocket.service.EscribiendoService;
+import com.seguridad.Messenger.websocket.service.WebSocketBroadcastService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationListener;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.AbstractSubProtocolEvent;
 import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Registra y libera sesiones WebSocket activas.
- * Un usuario puede tener múltiples sesiones simultáneas (varias pestañas/dispositivos).
- * Preparado para el módulo de presencia (próximo prompt).
+ * Registra sesiones WebSocket activas y emite eventos de presencia.
+ *
+ * Un usuario puede tener múltiples sesiones simultáneas (pestañas/dispositivos).
+ * La presencia se emite solo en la primera conexión y en la última desconexión.
+ *
+ * Ciclo de dependencia resuelto con {@code @Lazy}:
+ *   WebSocketSessionRegistry → WebSocketBroadcastService → WebSocketSessionRegistry
  */
+@Slf4j
 @Component
 public class WebSocketSessionRegistry implements ApplicationListener<AbstractSubProtocolEvent> {
 
+    private final WebSocketBroadcastService broadcastService;
+    private final EscribiendoService escribiendoService;
+    private final PerfilUsuarioRepository perfilUsuarioRepository;
+    private final ContactoRepository contactoRepository;
+    private final UsuarioRepository usuarioRepository;
+
     // usuarioId (toString) → conjunto de sessionIds activos
     private final ConcurrentHashMap<String, Set<String>> sesionesActivas = new ConcurrentHashMap<>();
+
+    public WebSocketSessionRegistry(
+            @Lazy WebSocketBroadcastService broadcastService,
+            @Lazy EscribiendoService escribiendoService,
+            PerfilUsuarioRepository perfilUsuarioRepository,
+            ContactoRepository contactoRepository,
+            UsuarioRepository usuarioRepository) {
+        this.broadcastService = broadcastService;
+        this.escribiendoService = escribiendoService;
+        this.perfilUsuarioRepository = perfilUsuarioRepository;
+        this.contactoRepository = contactoRepository;
+        this.usuarioRepository = usuarioRepository;
+    }
 
     @Override
     public void onApplicationEvent(AbstractSubProtocolEvent event) {
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
 
         if (event instanceof SessionConnectedEvent) {
-            String usuarioId = getPrincipalName(accessor);
+            String usuarioIdStr = getPrincipalName(accessor);
             String sessionId = accessor.getSessionId();
-            if (usuarioId != null && sessionId != null) {
-                sesionesActivas
-                        .computeIfAbsent(usuarioId, k -> ConcurrentHashMap.newKeySet())
-                        .add(sessionId);
+            if (usuarioIdStr == null || sessionId == null) return;
+
+            Set<String> sesiones = sesionesActivas
+                    .computeIfAbsent(usuarioIdStr, k -> ConcurrentHashMap.newKeySet());
+            boolean primeraConexion = sesiones.isEmpty();
+            sesiones.add(sessionId);
+
+            if (primeraConexion) {
+                emitirPresencia(UUID.fromString(usuarioIdStr), true, null);
             }
+
         } else if (event instanceof SessionDisconnectEvent) {
-            String usuarioId = getPrincipalName(accessor);
+            String usuarioIdStr = getPrincipalName(accessor);
             String sessionId = accessor.getSessionId();
-            if (usuarioId != null) {
-                Set<String> sesiones = sesionesActivas.get(usuarioId);
-                if (sesiones != null) {
-                    sesiones.remove(sessionId);
-                    if (sesiones.isEmpty()) sesionesActivas.remove(usuarioId);
+            if (usuarioIdStr == null) return;
+
+            Set<String> sesiones = sesionesActivas.get(usuarioIdStr);
+            if (sesiones != null) {
+                sesiones.remove(sessionId);
+                if (sesiones.isEmpty()) {
+                    sesionesActivas.remove(usuarioIdStr);
+                    UUID usuarioId = UUID.fromString(usuarioIdStr);
+
+                    // Cancela timers de escritura activos antes de emitir presencia
+                    escribiendoService.limpiarTodosLosTimeouts(usuarioId);
+
+                    // Persiste ultimoVisto en background (best-effort)
+                    LocalDateTime ahora = LocalDateTime.now();
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            perfilUsuarioRepository.actualizarUltimoVisto(usuarioId, ahora);
+                        } catch (Exception e) {
+                            log.warn("Error actualizando ultimoVisto usuario={}: {}",
+                                    usuarioId, e.getMessage());
+                        }
+                    });
+
+                    emitirPresencia(usuarioId, false, ahora);
                 }
             }
         }
@@ -55,6 +118,48 @@ public class WebSocketSessionRegistry implements ApplicationListener<AbstractSub
 
     public Set<String> getUsuariosConectados() {
         return Collections.unmodifiableSet(sesionesActivas.keySet());
+    }
+
+    // ─── Presencia ────────────────────────────────────────────────────────────
+
+    /**
+     * Emite un evento {@code PRESENCIA} a los destinatarios según la privacidad del usuario.
+     * Best-effort: los errores se loguean y no se propagan.
+     *
+     * @param ultimoVisto null en conexión; timestamp actual en desconexión
+     */
+    private void emitirPresencia(UUID usuarioId, boolean conectado, LocalDateTime ultimoVisto) {
+        try {
+            String username = usuarioRepository.findUsernameById(usuarioId);
+            if (username == null) return;
+
+            PrivacidadUltimoVisto privacidad = perfilUsuarioRepository.findById(usuarioId)
+                    .map(PerfilUsuario::getPrivacidadUltimoVisto)
+                    .orElse(PrivacidadUltimoVisto.TODOS);
+
+            PresenciaPayload payload = new PresenciaPayload(usuarioId, username, conectado, ultimoVisto);
+            WebSocketEvent<PresenciaPayload> evento = new WebSocketEvent<>("PRESENCIA", payload);
+
+            switch (privacidad) {
+                case TODOS ->
+                    // Notifica a todos los usuarios conectados (excepto al mismo)
+                    getUsuariosConectados().stream()
+                            .filter(uid -> !uid.equals(usuarioId.toString()))
+                            .forEach(uid -> broadcastService.enviarAUsuario(UUID.fromString(uid), evento));
+
+                case CONTACTOS -> {
+                    // Solo notifica a contactos del usuario que estén conectados
+                    List<UUID> contactoIds = contactoRepository.findContactoIdsByUsuarioId(usuarioId);
+                    contactoIds.stream()
+                            .filter(this::estaConectado)
+                            .forEach(cid -> broadcastService.enviarAUsuario(cid, evento));
+                }
+
+                case NADIE -> { /* El usuario no quiere que nadie sepa su presencia */ }
+            }
+        } catch (Exception e) {
+            log.warn("Error emitiendo presencia usuario={}: {}", usuarioId, e.getMessage());
+        }
     }
 
     private String getPrincipalName(StompHeaderAccessor accessor) {
