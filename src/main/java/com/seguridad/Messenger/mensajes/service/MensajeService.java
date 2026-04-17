@@ -16,7 +16,9 @@ import com.seguridad.Messenger.mensajes.repository.ReaccionRepository;
 import com.seguridad.Messenger.shared.enums.TipoMensaje;
 import com.seguridad.Messenger.shared.exception.AccesoDenegadoException;
 import com.seguridad.Messenger.shared.exception.RecursoNoEncontradoException;
+import com.seguridad.Messenger.websocket.event.MensajeEnviadoEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -41,6 +43,7 @@ public class MensajeService {
     private final ParticipanteRepository participanteRepository;
     private final StorageService storageService;
     private final ReaccionRepository reaccionRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ─── Enviar ───────────────────────────────────────────────────────────────
 
@@ -135,7 +138,9 @@ public class MensajeService {
             estadoMensajeRepository.saveAll(estados);
         }
 
-        return toResponse(mensajeFinal, usuarioId, conversacionId);
+        MensajeResponse response = toResponse(mensajeFinal, usuarioId, conversacionId);
+        eventPublisher.publishEvent(new MensajeEnviadoEvent(response));
+        return response;
     }
 
     // ─── Editar ───────────────────────────────────────────────────────────────
@@ -341,7 +346,9 @@ public class MensajeService {
             estadoMensajeRepository.saveAll(estados);
         }
 
-        return toResponse(forwardGuardado, usuarioId, conversacionId);
+        MensajeResponse response = toResponse(forwardGuardado, usuarioId, conversacionId);
+        eventPublisher.publishEvent(new MensajeEnviadoEvent(response));
+        return response;
     }
 
     // ─── Helpers privados ─────────────────────────────────────────────────────
