@@ -47,6 +47,12 @@ public record MensajeResponse(
         ArchivoMultimediaResponse archivo,
 
         @Schema(description = "Ubicación geográfica. Null si el mensaje no es de tipo UBICACION.")
-        UbicacionResponse ubicacion
+        UbicacionResponse ubicacion,
+
+        @Schema(description = "Reacciones agrupadas por emoji.")
+        List<ResumenReaccionesResponse> reacciones,
+
+        @Schema(description = "Datos del mensaje original reenviado. Null si no es un forward.")
+        ForwardResponse reenviaDe
 
 ) {}

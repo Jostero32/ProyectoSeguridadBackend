@@ -7,9 +7,12 @@ import com.seguridad.Messenger.mensajes.model.ArchivoMultimedia;
 import com.seguridad.Messenger.mensajes.model.EstadoMensaje;
 import com.seguridad.Messenger.mensajes.model.EstadoMensajeId;
 import com.seguridad.Messenger.mensajes.model.Mensaje;
+import com.seguridad.Messenger.mensajes.model.Reaccion;
+import com.seguridad.Messenger.mensajes.model.ReaccionId;
 import com.seguridad.Messenger.mensajes.model.UbicacionMensaje;
 import com.seguridad.Messenger.mensajes.repository.EstadoMensajeRepository;
 import com.seguridad.Messenger.mensajes.repository.MensajeRepository;
+import com.seguridad.Messenger.mensajes.repository.ReaccionRepository;
 import com.seguridad.Messenger.shared.enums.TipoMensaje;
 import com.seguridad.Messenger.shared.exception.AccesoDenegadoException;
 import com.seguridad.Messenger.shared.exception.RecursoNoEncontradoException;
@@ -37,6 +40,7 @@ public class MensajeService {
     private final ConversacionRepository conversacionRepository;
     private final ParticipanteRepository participanteRepository;
     private final StorageService storageService;
+    private final ReaccionRepository reaccionRepository;
 
     // ─── Enviar ───────────────────────────────────────────────────────────────
 
@@ -53,7 +57,6 @@ public class MensajeService {
                                          String nombreLugar) {
         verificarParticipante(conversacionId, usuarioId);
 
-        // Validar coherencia tipo / payload
         if (tipo == TipoMensaje.TEXTO && (contenido == null || contenido.isBlank())) {
             throw new IllegalArgumentException("El contenido es obligatorio para mensajes de tipo TEXTO");
         }
@@ -64,7 +67,6 @@ public class MensajeService {
             throw new IllegalArgumentException("El archivo es obligatorio para mensajes de tipo " + tipo);
         }
 
-        // Mensaje al que responde
         Mensaje respuestaMensaje = null;
         if (respuestaMensajeId != null) {
             respuestaMensaje = mensajeRepository.findById(respuestaMensajeId)
@@ -91,7 +93,6 @@ public class MensajeService {
 
         final Mensaje mensajeGuardado = mensajeRepository.save(mensaje);
 
-        // Archivo multimedia
         if (tipo != TipoMensaje.TEXTO && tipo != TipoMensaje.UBICACION) {
             StorageService.StorageResult result = storageService.subir(archivo, tipo);
             ArchivoMultimedia am = new ArchivoMultimedia();
@@ -106,7 +107,6 @@ public class MensajeService {
             mensajeGuardado.setArchivo(am);
         }
 
-        // Ubicación
         if (tipo == TipoMensaje.UBICACION) {
             UbicacionMensaje ub = new UbicacionMensaje();
             ub.setMensaje(mensajeGuardado);
@@ -116,10 +116,8 @@ public class MensajeService {
             mensajeGuardado.setUbicacion(ub);
         }
 
-        // Guardar archivo/ubicación vía cascada re-saving el mensaje
         final Mensaje mensajeFinal = mensajeRepository.save(mensajeGuardado);
 
-        // Estado_Mensaje para cada participante receptor
         LocalDateTime ahora = LocalDateTime.now();
         List<UUID> receptores = participanteRepository
                 .findUsuarioIdsByConversacionExcluyendo(conversacionId, usuarioId);
@@ -180,7 +178,6 @@ public class MensajeService {
             if (!mensaje.getRemitenteId().equals(usuarioId)) {
                 throw new AccesoDenegadoException("Solo el remitente puede eliminar el mensaje para todos");
             }
-            // Eliminar archivo de MinIO si existe
             if (mensaje.getArchivo() != null) {
                 storageService.eliminar(mensaje.getArchivo().getObjectKey());
             }
@@ -247,6 +244,106 @@ public class MensajeService {
                 .map(m -> toResponse(m, usuarioId, conversacionId));
     }
 
+    // ─── Reaccionar (upsert) ──────────────────────────────────────────────────
+
+    public List<ResumenReaccionesResponse> reaccionar(UUID conversacionId, UUID mensajeId,
+                                                       UUID usuarioId, ReaccionRequest req) {
+        verificarParticipante(conversacionId, usuarioId);
+
+        Mensaje mensaje = cargarMensaje(mensajeId);
+        verificarMensajeEnConversacion(mensaje, conversacionId);
+
+        if (mensaje.isEliminadoParaTodos()) {
+            throw new IllegalStateException("No se puede reaccionar a un mensaje eliminado para todos");
+        }
+
+        reaccionRepository.upsert(mensajeId, usuarioId, req.emoji(), LocalDateTime.now());
+
+        // Leer el estado actualizado directamente del repositorio (el upsert fue nativo)
+        return construirResumenReacciones(reaccionRepository.findByMensajeId(mensajeId), usuarioId);
+    }
+
+    // ─── Quitar reacción ──────────────────────────────────────────────────────
+
+    public void quitarReaccion(UUID conversacionId, UUID mensajeId, UUID usuarioId) {
+        verificarParticipante(conversacionId, usuarioId);
+
+        Mensaje mensaje = cargarMensaje(mensajeId);
+        verificarMensajeEnConversacion(mensaje, conversacionId);
+
+        ReaccionId reaccionId = new ReaccionId(mensajeId, usuarioId);
+        if (!reaccionRepository.existsById(reaccionId)) {
+            throw new RecursoNoEncontradoException("No tienes una reacción en este mensaje");
+        }
+        reaccionRepository.deleteById(reaccionId);
+    }
+
+    // ─── Listar reacciones detalladas ─────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<ReaccionResponse> listarReacciones(UUID conversacionId, UUID mensajeId, UUID usuarioId) {
+        verificarParticipante(conversacionId, usuarioId);
+
+        Mensaje mensaje = cargarMensaje(mensajeId);
+        verificarMensajeEnConversacion(mensaje, conversacionId);
+
+        return reaccionRepository.findByMensajeIdConUsuario(mensajeId).stream()
+                .map(r -> new ReaccionResponse(
+                        r.getId().getUsuarioId(),
+                        r.getUsuario().getUsername(),
+                        r.getEmoji(),
+                        r.getCreadaEn()))
+                .toList();
+    }
+
+    // ─── Forward ──────────────────────────────────────────────────────────────
+
+    public MensajeResponse forward(UUID conversacionId, UUID mensajeIdOrigen, UUID usuarioId) {
+        verificarParticipante(conversacionId, usuarioId);
+
+        Mensaje original = cargarMensaje(mensajeIdOrigen);
+        verificarMensajeEnConversacion(original, conversacionId);
+
+        if (original.isEliminadoParaTodos()) {
+            throw new IllegalStateException("No se puede reenviar un mensaje eliminado para todos");
+        }
+
+        // Romper cadena: si el original ya es un forward, referenciar su origen
+        UUID idAReferenciar = original.getReenviaDe() != null
+                ? original.getReenviaDe().getId()
+                : original.getId();
+
+        Mensaje forwardMsg = new Mensaje();
+        forwardMsg.setConversacion(conversacionRepository.getReferenceById(conversacionId));
+        forwardMsg.setRemitenteId(usuarioId);
+        forwardMsg.setReenviaDe(mensajeRepository.getReferenceById(idAReferenciar));
+        forwardMsg.setTipo(original.getTipo());
+        forwardMsg.setContenidoCifrado(null);
+        forwardMsg.setCreadoEn(LocalDateTime.now());
+        forwardMsg.setEliminadoParaTodos(false);
+
+        final Mensaje forwardGuardado = mensajeRepository.save(forwardMsg);
+
+        LocalDateTime ahora = LocalDateTime.now();
+        List<UUID> receptores = participanteRepository
+                .findUsuarioIdsByConversacionExcluyendo(conversacionId, usuarioId);
+
+        List<EstadoMensaje> estados = receptores.stream()
+                .map(receptorId -> {
+                    EstadoMensaje e = new EstadoMensaje();
+                    e.setId(new EstadoMensajeId(forwardGuardado.getId(), receptorId));
+                    e.setEntregadoEn(ahora);
+                    return e;
+                })
+                .collect(Collectors.toList());
+
+        if (!estados.isEmpty()) {
+            estadoMensajeRepository.saveAll(estados);
+        }
+
+        return toResponse(forwardGuardado, usuarioId, conversacionId);
+    }
+
     // ─── Helpers privados ─────────────────────────────────────────────────────
 
     private void verificarParticipante(UUID conversacionId, UUID usuarioId) {
@@ -264,6 +361,19 @@ public class MensajeService {
         if (!mensaje.getConversacion().getId().equals(conversacionId)) {
             throw new RecursoNoEncontradoException("El mensaje no pertenece a esta conversación");
         }
+    }
+
+    private List<ResumenReaccionesResponse> construirResumenReacciones(List<Reaccion> reacciones, UUID usuarioId) {
+        return reacciones.stream()
+                .collect(Collectors.groupingBy(Reaccion::getEmoji, Collectors.counting()))
+                .entrySet().stream()
+                .map(e -> new ResumenReaccionesResponse(
+                        e.getKey(),
+                        e.getValue(),
+                        reacciones.stream().anyMatch(r ->
+                                r.getId().getUsuarioId().equals(usuarioId) && r.getEmoji().equals(e.getKey()))
+                ))
+                .toList();
     }
 
     private MensajeResponse toResponse(Mensaje mensaje, UUID usuarioId, UUID conversacionId) {
@@ -324,6 +434,23 @@ public class MensajeService {
             ubicacionResp = new UbicacionResponse(ub.getLatitud(), ub.getLongitud(), ub.getNombreLugar());
         }
 
+        // Reacciones — agrupadas por emoji (batch-loaded por @BatchSize)
+        List<ResumenReaccionesResponse> resumenReacciones =
+                construirResumenReacciones(mensaje.getReacciones(), usuarioId);
+
+        // Forward — datos del mensaje original
+        ForwardResponse forwardResp = null;
+        if (mensaje.getReenviaDe() != null) {
+            Mensaje orig = mensaje.getReenviaDe();
+            forwardResp = new ForwardResponse(
+                    orig.getId(),
+                    orig.getRemitenteId(),
+                    orig.isEliminadoParaTodos() ? null : orig.getContenidoCifrado(),
+                    orig.getTipo(),
+                    orig.getEliminadoEn() != null
+            );
+        }
+
         return new MensajeResponse(
                 mensaje.getId(),
                 conversacionId,
@@ -337,7 +464,9 @@ public class MensajeService {
                 respuesta,
                 estados,
                 archivoResp,
-                ubicacionResp
+                ubicacionResp,
+                resumenReacciones,
+                forwardResp
         );
     }
 }

@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -150,6 +151,82 @@ public class MensajeController {
             @RequestParam(defaultValue = "para_mi") String tipo) {
         mensajeService.eliminarMensaje(conversacionId, mensajeId, principal.usuarioId(), tipo);
     }
+
+    // ─── Reacciones ───────────────────────────────────────────────────────────
+
+    @PutMapping("/{mensajeId}/reaccion")
+    @Operation(summary = "Añadir o reemplazar reacción",
+            description = "Establece la reacción del usuario autenticado en el mensaje. " +
+                    "Si ya existe una reacción previa, la reemplaza. Un usuario = una reacción por mensaje.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Resumen de reacciones actualizado"),
+            @ApiResponse(responseCode = "400", description = "Mensaje eliminado para todos"),
+            @ApiResponse(responseCode = "403", description = "No eres participante de la conversación"),
+            @ApiResponse(responseCode = "404", description = "Mensaje no encontrado")
+    })
+    public List<ResumenReaccionesResponse> reaccionar(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
+            @Parameter(description = "ID del mensaje") @PathVariable UUID mensajeId,
+            @Valid @RequestBody ReaccionRequest req) {
+        return mensajeService.reaccionar(conversacionId, mensajeId, principal.usuarioId(), req);
+    }
+
+    @DeleteMapping("/{mensajeId}/reaccion")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Quitar reacción",
+            description = "Elimina la reacción del usuario autenticado en el mensaje.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Reacción eliminada"),
+            @ApiResponse(responseCode = "403", description = "No eres participante de la conversación"),
+            @ApiResponse(responseCode = "404", description = "No tienes una reacción en este mensaje")
+    })
+    public void quitarReaccion(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
+            @Parameter(description = "ID del mensaje") @PathVariable UUID mensajeId) {
+        mensajeService.quitarReaccion(conversacionId, mensajeId, principal.usuarioId());
+    }
+
+    @GetMapping("/{mensajeId}/reacciones")
+    @Operation(summary = "Listar reacciones detalladas",
+            description = "Devuelve la lista completa de reacciones del mensaje con el username de cada usuario, " +
+                    "ordenada por fecha de creación ASC.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lista de reacciones"),
+            @ApiResponse(responseCode = "403", description = "No eres participante de la conversación"),
+            @ApiResponse(responseCode = "404", description = "Mensaje no encontrado")
+    })
+    public List<ReaccionResponse> listarReacciones(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
+            @Parameter(description = "ID del mensaje") @PathVariable UUID mensajeId) {
+        return mensajeService.listarReacciones(conversacionId, mensajeId, principal.usuarioId());
+    }
+
+    // ─── Forward ──────────────────────────────────────────────────────────────
+
+    @PostMapping("/{mensajeId}/forward")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Reenviar mensaje dentro de la misma conversación",
+            description = "Crea un nuevo mensaje que referencia al mensaje original. " +
+                    "El contenido no se copia — se lee del mensaje original. " +
+                    "Si el mensaje original ya es un forward, el nuevo forward apunta al origen de la cadena. " +
+                    "El campo `reenviaDe.contenido` será null si el original fue eliminado para todos.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Mensaje reenviado"),
+            @ApiResponse(responseCode = "400", description = "El mensaje original fue eliminado para todos"),
+            @ApiResponse(responseCode = "403", description = "No eres participante de la conversación"),
+            @ApiResponse(responseCode = "404", description = "Mensaje no encontrado")
+    })
+    public MensajeResponse forward(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
+            @Parameter(description = "ID del mensaje a reenviar") @PathVariable UUID mensajeId) {
+        return mensajeService.forward(conversacionId, mensajeId, principal.usuarioId());
+    }
+
+    // ─── Marcar como leído ────────────────────────────────────────────────────
 
     @PostMapping("/{mensajeId}/leido")
     @ResponseStatus(HttpStatus.NO_CONTENT)

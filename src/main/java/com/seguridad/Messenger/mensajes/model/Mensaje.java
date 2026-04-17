@@ -5,7 +5,11 @@ import com.seguridad.Messenger.shared.enums.TipoMensaje;
 import jakarta.persistence.*;
 import lombok.*;
 
+import org.hibernate.annotations.BatchSize;
+
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -55,4 +59,12 @@ public class Mensaje {
 
     @OneToOne(mappedBy = "mensaje", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private UbicacionMensaje ubicacion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reenviado_de_id")
+    private Mensaje reenviaDe;
+
+    @OneToMany(mappedBy = "mensaje", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 30)
+    private List<Reaccion> reacciones = new ArrayList<>();
 }
