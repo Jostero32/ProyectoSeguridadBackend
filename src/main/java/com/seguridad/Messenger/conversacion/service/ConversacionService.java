@@ -12,6 +12,7 @@ import com.seguridad.Messenger.shared.enums.TipoConversacion;
 import com.seguridad.Messenger.shared.exception.AccesoDenegadoException;
 import com.seguridad.Messenger.shared.exception.RecursoNoEncontradoException;
 import com.seguridad.Messenger.usuario.model.Usuario;
+import com.seguridad.Messenger.shared.service.StorageService;
 import com.seguridad.Messenger.usuario.repository.BloqueoRepository;
 import com.seguridad.Messenger.usuario.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -37,6 +39,7 @@ public class ConversacionService {
     private final MensajeRepository mensajeRepository;
     private final EstadoMensajeRepository estadoMensajeRepository;
     private final BloqueoRepository bloqueoRepository;
+    private final StorageService storageService;
 
     // ─── Chat individual ───────────────────────────────────────────────────────
 
@@ -76,7 +79,8 @@ public class ConversacionService {
 
         // Para chat individual: el "título" es el nombre del destinatario
         String titulo = destinatario.getPersona().getNombres() + " " + destinatario.getPersona().getApellidos();
-        String urlAvatar = destinatario.getPerfil() != null ? destinatario.getPerfil().getUrlAvatar() : null;
+        String avatarKey = destinatario.getPerfil() != null ? destinatario.getPerfil().getAvatarKey() : null;
+        String urlAvatar = avatarKey != null ? "/archivos/" + avatarKey : null;
         ConversacionResponse response = new ConversacionResponse(
                 conv.getId(), TipoConversacion.INDIVIDUAL, titulo, urlAvatar, conv.getCreadaEn(), false, 2);
         return new ChatIndividualResult(response, true);
@@ -84,25 +88,31 @@ public class ConversacionService {
 
     // ─── Grupos ───────────────────────────────────────────────────────────────
 
-    public ConversacionResponse crearGrupo(UUID usuarioId, CrearGrupoRequest req) {
+    public ConversacionResponse crearGrupo(UUID usuarioId, String titulo, MultipartFile avatar,
+                                            List<UUID> miembrosIds) {
         Usuario creador = usuarioRepository.findByIdAndActivoTrue(usuarioId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
 
-        List<UUID> miembrosIds = req.miembrosIds().stream()
+        List<UUID> miembrosFiltrados = miembrosIds.stream()
                 .filter(id -> !id.equals(usuarioId))
                 .distinct()
                 .collect(Collectors.toList());
 
-        List<Usuario> miembros = miembrosIds.stream()
+        List<Usuario> miembros = miembrosFiltrados.stream()
                 .map(id -> usuarioRepository.findByIdAndActivoTrue(id)
                         .orElseThrow(() -> new RecursoNoEncontradoException(
                                 "Usuario con id " + id + " no encontrado")))
                 .collect(Collectors.toList());
 
+        String avatarKey = null;
+        if (avatar != null && !avatar.isEmpty()) {
+            avatarKey = storageService.subirAvatar(avatar);
+        }
+
         Conversacion conv = new Conversacion();
         conv.setTipo(TipoConversacion.GRUPO);
-        conv.setTituloGrupo(req.titulo());
-        conv.setUrlAvatarGrupo(req.urlAvatar());
+        conv.setTituloGrupo(titulo);
+        conv.setAvatarGrupoKey(avatarKey);
         conv.setCreadaEn(LocalDateTime.now());
         conv = conversacionRepository.save(conv);
 
@@ -112,8 +122,9 @@ public class ConversacionService {
         }
 
         int totalMiembros = 1 + miembros.size();
+        String urlAvatar = avatarKey != null ? "/archivos/" + avatarKey : null;
         return new ConversacionResponse(
-                conv.getId(), TipoConversacion.GRUPO, req.titulo(), req.urlAvatar(),
+                conv.getId(), TipoConversacion.GRUPO, titulo, urlAvatar,
                 conv.getCreadaEn(), true, totalMiembros);
     }
 
@@ -150,24 +161,27 @@ public class ConversacionService {
 
     // ─── Actualizar / Eliminar grupo ──────────────────────────────────────────
 
-    public ConversacionResponse actualizarGrupo(UUID conversacionId, UUID usuarioId, ActualizarGrupoRequest req) {
+    public ConversacionResponse actualizarGrupo(UUID conversacionId, UUID usuarioId, String titulo,
+                                                 MultipartFile avatar) {
         Conversacion conv = cargarConversacion(conversacionId);
         if (conv.getTipo() == TipoConversacion.INDIVIDUAL) {
             throw new IllegalArgumentException("No se puede modificar un chat individual");
         }
         verificarAdmin(conversacionId, usuarioId);
 
-        if (req.titulo() != null && !req.titulo().isBlank()) {
-            conv.setTituloGrupo(req.titulo());
+        if (titulo != null && !titulo.isBlank()) {
+            conv.setTituloGrupo(titulo);
         }
-        if (req.urlAvatar() != null) {
-            conv.setUrlAvatarGrupo(req.urlAvatar());
+        if (avatar != null && !avatar.isEmpty()) {
+            storageService.eliminar(conv.getAvatarGrupoKey());
+            conv.setAvatarGrupoKey(storageService.subirAvatar(avatar));
         }
         conv = conversacionRepository.save(conv);
 
         int totalMiembros = (int) participanteRepository.countByIdConversacionId(conversacionId);
+        String urlAvatar = conv.getAvatarGrupoKey() != null ? "/archivos/" + conv.getAvatarGrupoKey() : null;
         return new ConversacionResponse(
-                conv.getId(), TipoConversacion.GRUPO, conv.getTituloGrupo(), conv.getUrlAvatarGrupo(),
+                conv.getId(), TipoConversacion.GRUPO, conv.getTituloGrupo(), urlAvatar,
                 conv.getCreadaEn(), true, totalMiembros);
     }
 
@@ -344,10 +358,11 @@ public class ConversacionService {
                     .orElseThrow(() -> new RecursoNoEncontradoException("Participante no encontrado"));
             Usuario otroUsuario = otro.getUsuario();
             titulo = otroUsuario.getPersona().getNombres() + " " + otroUsuario.getPersona().getApellidos();
-            urlAvatar = otroUsuario.getPerfil() != null ? otroUsuario.getPerfil().getUrlAvatar() : null;
+            String key = otroUsuario.getPerfil() != null ? otroUsuario.getPerfil().getAvatarKey() : null;
+            urlAvatar = key != null ? "/archivos/" + key : null;
         } else {
             titulo = c.getTituloGrupo();
-            urlAvatar = c.getUrlAvatarGrupo();
+            urlAvatar = c.getAvatarGrupoKey() != null ? "/archivos/" + c.getAvatarGrupoKey() : null;
         }
 
         boolean esAdmin = c.getParticipantes().stream()
@@ -404,10 +419,11 @@ public class ConversacionService {
                     .orElseThrow(() -> new RecursoNoEncontradoException("Participante no encontrado"));
             Usuario otroUsuario = otro.getUsuario();
             titulo = otroUsuario.getPersona().getNombres() + " " + otroUsuario.getPersona().getApellidos();
-            urlAvatar = otroUsuario.getPerfil() != null ? otroUsuario.getPerfil().getUrlAvatar() : null;
+            String key = otroUsuario.getPerfil() != null ? otroUsuario.getPerfil().getAvatarKey() : null;
+            urlAvatar = key != null ? "/archivos/" + key : null;
         } else {
             titulo = c.getTituloGrupo();
-            urlAvatar = c.getUrlAvatarGrupo();
+            urlAvatar = c.getAvatarGrupoKey() != null ? "/archivos/" + c.getAvatarGrupoKey() : null;
         }
 
         boolean esAdmin = c.getParticipantes().stream()
@@ -422,7 +438,8 @@ public class ConversacionService {
     private ParticipanteResponse toParticipanteResponse(Participante p) {
         Usuario u = p.getUsuario();
         String nombreCompleto = u.getPersona().getNombres() + " " + u.getPersona().getApellidos();
-        String urlAvatar = u.getPerfil() != null ? u.getPerfil().getUrlAvatar() : null;
+        String avatarKey = u.getPerfil() != null ? u.getPerfil().getAvatarKey() : null;
+        String urlAvatar = avatarKey != null ? "/archivos/" + avatarKey : null;
         return new ParticipanteResponse(
                 u.getId(), u.getUsername(), nombreCompleto, urlAvatar, p.getRol(), p.getFechaUnion());
     }

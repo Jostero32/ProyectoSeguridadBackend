@@ -1,5 +1,7 @@
 package com.seguridad.Messenger.conversacion.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.seguridad.Messenger.conversacion.dto.*;
 import com.seguridad.Messenger.conversacion.service.ConversacionService;
 import com.seguridad.Messenger.mensajes.service.MensajeService;
@@ -13,9 +15,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +33,7 @@ public class ConversacionController {
 
     private final ConversacionService conversacionService;
     private final MensajeService mensajeService;
+    private final ObjectMapper objectMapper;
 
     @PostMapping("/individual")
     @Operation(summary = "Crear o recuperar chat individual",
@@ -49,10 +54,10 @@ public class ConversacionController {
                 : ResponseEntity.ok(result.conversacion());
     }
 
-    @PostMapping("/grupo")
+    @PostMapping(value = "/grupo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Crear grupo",
-            description = "El creador queda como administrador. Los miembrosIds se agregan con rol MIEMBRO.")
+            description = "El creador queda como administrador. miembrosIds debe ser un JSON array de UUIDs.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Grupo creado exitosamente"),
             @ApiResponse(responseCode = "400", description = "Solicitud inválida"),
@@ -60,8 +65,15 @@ public class ConversacionController {
     })
     public ConversacionResponse crearGrupo(
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody CrearGrupoRequest req) {
-        return conversacionService.crearGrupo(principal.usuarioId(), req);
+            @RequestPart("titulo") String titulo,
+            @RequestPart(value = "avatar", required = false) MultipartFile avatar,
+            @RequestPart("miembrosIds") String miembrosIdsJson) {
+        try {
+            List<UUID> miembrosIds = objectMapper.readValue(miembrosIdsJson, new TypeReference<>() {});
+            return conversacionService.crearGrupo(principal.usuarioId(), titulo, avatar, miembrosIds);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalArgumentException("miembrosIds debe ser un JSON array de UUIDs: " + e.getMessage());
+        }
     }
 
     @GetMapping
@@ -90,9 +102,9 @@ public class ConversacionController {
         return conversacionService.obtenerConversacion(id, principal.usuarioId());
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Actualizar nombre o avatar del grupo",
-            description = "Solo los campos no nulos se actualizan. Solo el administrador puede ejecutar esta acción.")
+            description = "Solo los campos presentes se actualizan. Solo el administrador puede ejecutar esta acción.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Grupo actualizado"),
             @ApiResponse(responseCode = "400", description = "No se puede modificar un chat individual"),
@@ -102,8 +114,9 @@ public class ConversacionController {
     public ConversacionResponse actualizarGrupo(
             @AuthenticationPrincipal UserPrincipal principal,
             @Parameter(description = "ID de la conversación") @PathVariable UUID id,
-            @Valid @RequestBody ActualizarGrupoRequest req) {
-        return conversacionService.actualizarGrupo(id, principal.usuarioId(), req);
+            @RequestPart(value = "titulo", required = false) String titulo,
+            @RequestPart(value = "avatar", required = false) MultipartFile avatar) {
+        return conversacionService.actualizarGrupo(id, principal.usuarioId(), titulo, avatar);
     }
 
     @DeleteMapping("/{id}")

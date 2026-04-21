@@ -31,8 +31,8 @@ public class Conversacion {
     @Column(name = "titulo_grupo")
     private String tituloGrupo;
 
-    @Column(name = "url_avatar_grupo")
-    private String urlAvatarGrupo;
+    @Column(name = "avatar_grupo_key")
+    private String avatarGrupoKey;
 
     @Column(name = "creada_en", nullable = false, updatable = false)
     private LocalDateTime creadaEn;

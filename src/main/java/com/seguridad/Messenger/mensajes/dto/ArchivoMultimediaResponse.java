@@ -5,8 +5,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "Información del archivo multimedia adjunto al mensaje")
 public record ArchivoMultimediaResponse(
 
-        @Schema(description = "URL pública del archivo")
-        String url,
+        @Schema(description = "Ruta al endpoint de acceso al archivo (requiere autenticación)")
+        String urlAcceso,
 
         @Schema(description = "Nombre original del archivo")
         String nombreOriginal,

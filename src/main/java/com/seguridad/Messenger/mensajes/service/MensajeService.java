@@ -372,7 +372,7 @@ public class MensajeService {
         if (mensaje.getArchivo() != null && !mensaje.isEliminadoParaTodos()) {
             ArchivoMultimedia am = mensaje.getArchivo();
             archivoResp = new ArchivoMultimediaResponse(
-                    storageService.urlPublica(am.getObjectKey()),
+                    "/archivos/" + am.getObjectKey(),
                     am.getNombreOriginal(),
                     am.getContentType(),
                     am.getTamanioBytes(),

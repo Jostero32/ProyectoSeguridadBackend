@@ -64,7 +64,8 @@ public class BloqueoService {
         UUID bloqueadoId = bloqueo.getId().getBloqueadoId();
         Usuario usuario = usuarioRepository.findById(bloqueadoId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
-        String urlAvatar = perfilUsuarioRepository.findUrlAvatarById(bloqueadoId);
+        String avatarKey = perfilUsuarioRepository.findUrlAvatarById(bloqueadoId);
+        String urlAvatar = avatarKey != null ? "/archivos/" + avatarKey : null;
         return new BloqueoResponse(
                 bloqueadoId,
                 usuario.getUsername(),

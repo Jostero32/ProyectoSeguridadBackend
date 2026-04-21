@@ -4,10 +4,13 @@ import com.seguridad.Messenger.config.StorageProperties;
 import com.seguridad.Messenger.shared.enums.TipoMensaje;
 import com.seguridad.Messenger.shared.exception.ArchivoDemasiadoGrandeException;
 import com.seguridad.Messenger.shared.exception.TipoArchivoNoPermitidoException;
+import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.http.Method;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,7 +19,9 @@ import java.io.ByteArrayInputStream;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StorageService {
@@ -25,9 +30,10 @@ public class StorageService {
     private final StorageProperties props;
 
     private static final Tika TIKA = new Tika();
+    private static final int PRESIGNED_URL_EXPIRY_DAYS = 1;
 
-    private static final Set<String> MIMES_AVATAR = Set.of("image/jpeg", "image/png", "image/webp");
-    private static final long MAX_BYTES_AVATAR = 5L * 1024 * 1024;
+    public static final Set<String> MIMES_AVATAR = Set.of("image/jpeg", "image/png", "image/webp");
+    public static final long MAX_BYTES_AVATAR = 5L * 1024 * 1024;
 
     private static final Map<TipoMensaje, Set<String>> TIPOS_PERMITIDOS = Map.of(
             TipoMensaje.IMAGEN,    Set.of("image/jpeg", "image/png", "image/webp", "image/gif"),
@@ -56,6 +62,8 @@ public class StorageService {
 
     public record StorageResult(String objectKey, String contentType, long tamanioBytes) {}
 
+    // ─── SUBIDA ───────────────────────────────────────────────────────────────
+
     public StorageResult subir(MultipartFile archivo, TipoMensaje tipo) {
         try {
             byte[] bytes = archivo.getBytes();
@@ -67,16 +75,7 @@ public class StorageService {
             String extension = getExtension(archivo.getOriginalFilename());
             String objectKey = tipo.name().toLowerCase() + "/" + UUID.randomUUID() + extension;
 
-            try (ByteArrayInputStream is = new ByteArrayInputStream(bytes)) {
-                minioClient.putObject(
-                        PutObjectArgs.builder()
-                                .bucket(props.getBucket())
-                                .object(objectKey)
-                                .stream(is, bytes.length, -1)
-                                .contentType(contentType)
-                                .build()
-                );
-            }
+            putObject(objectKey, bytes, contentType);
             return new StorageResult(objectKey, contentType, bytes.length);
 
         } catch (TipoArchivoNoPermitidoException | ArchivoDemasiadoGrandeException e) {
@@ -86,6 +85,9 @@ public class StorageService {
         }
     }
 
+    /**
+     * Sube un avatar. Devuelve el object_key (no la URL).
+     */
     public String subirAvatar(MultipartFile avatar) {
         try {
             byte[] bytes = avatar.getBytes();
@@ -99,18 +101,8 @@ public class StorageService {
             }
 
             String objectKey = "avatars/" + UUID.randomUUID() + extensionDesdeMime(mime);
-
-            try (ByteArrayInputStream is = new ByteArrayInputStream(bytes)) {
-                minioClient.putObject(
-                        PutObjectArgs.builder()
-                                .bucket(props.getBucket())
-                                .object(objectKey)
-                                .stream(is, bytes.length, -1)
-                                .contentType(mime)
-                                .build()
-                );
-            }
-            return urlPublica(objectKey);
+            putObject(objectKey, bytes, mime);
+            return objectKey;
 
         } catch (TipoArchivoNoPermitidoException | ArchivoDemasiadoGrandeException e) {
             throw e;
@@ -119,7 +111,30 @@ public class StorageService {
         }
     }
 
+    // ─── PRESIGNED URL ────────────────────────────────────────────────────────
+
+    /**
+     * Genera una presigned URL válida por 1 día para el object_key dado.
+     */
+    public String generarPresignedUrl(String objectKey) {
+        try {
+            return minioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .bucket(props.getBucket())
+                            .object(objectKey)
+                            .method(Method.GET)
+                            .expiry(PRESIGNED_URL_EXPIRY_DAYS, TimeUnit.DAYS)
+                            .build()
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("Error generando presigned URL para: " + objectKey, e);
+        }
+    }
+
+    // ─── ELIMINACIÓN ──────────────────────────────────────────────────────────
+
     public void eliminar(String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) return;
         try {
             minioClient.removeObject(
                     RemoveObjectArgs.builder()
@@ -128,19 +143,25 @@ public class StorageService {
                             .build()
             );
         } catch (Exception e) {
-            throw new RuntimeException("Error al eliminar archivo: " + e.getMessage(), e);
+            log.warn("Error eliminando objeto {}: {}", objectKey, e.getMessage());
         }
     }
 
-    public void eliminarPorUrl(String url) {
-        if (url == null || url.isBlank()) return;
-        String prefix = props.getPublicUrl() + "/" + props.getBucket() + "/";
-        if (!url.startsWith(prefix)) return;
-        eliminar(url.substring(prefix.length()));
-    }
+    // ─── PRIVADOS ─────────────────────────────────────────────────────────────
 
-    public String urlPublica(String objectKey) {
-        return props.getPublicUrl() + "/" + props.getBucket() + "/" + objectKey;
+    private void putObject(String objectKey, byte[] bytes, String mimeType) {
+        try (ByteArrayInputStream is = new ByteArrayInputStream(bytes)) {
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(props.getBucket())
+                            .object(objectKey)
+                            .stream(is, bytes.length, -1)
+                            .contentType(mimeType)
+                            .build()
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("Error al subir objeto a MinIO: " + e.getMessage(), e);
+        }
     }
 
     private void validarContentType(String mimeDetectado, TipoMensaje tipo) {
