@@ -2,7 +2,7 @@ package com.seguridad.Messenger.usuario.service;
 
 import com.seguridad.Messenger.shared.enums.PrivacidadUltimoVisto;
 import com.seguridad.Messenger.shared.exception.RecursoNoEncontradoException;
-import com.seguridad.Messenger.usuario.dto.ActualizarPerfilRequest;
+import com.seguridad.Messenger.shared.service.StorageService;
 import com.seguridad.Messenger.usuario.dto.PerfilResponse;
 import com.seguridad.Messenger.usuario.dto.RegistroRequest;
 import com.seguridad.Messenger.usuario.model.Persona;
@@ -15,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -25,6 +26,7 @@ public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
+    private final StorageService storageService;
 
     @Transactional
     public Usuario registrar(RegistroRequest request) {
@@ -56,23 +58,39 @@ public class UsuarioService {
     }
 
     @Transactional
-    public PerfilResponse actualizarPerfil(UUID usuarioId, ActualizarPerfilRequest request) {
+    public PerfilResponse actualizarPerfil(UUID usuarioId, MultipartFile avatar,
+                                           String bio, String privacidadUltimoVistoStr) {
         Usuario usuario = usuarioRepository.findByIdAndActivoTrue(usuarioId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
 
         PerfilUsuario perfil = usuario.getPerfil();
 
-        if (request.urlAvatar() != null) {
-            perfil.setUrlAvatar(request.urlAvatar());
+        String urlAvatarViejo = null;
+        if (avatar != null && !avatar.isEmpty()) {
+            urlAvatarViejo = perfil.getUrlAvatar();
+            perfil.setUrlAvatar(storageService.subirAvatar(avatar));
         }
-        if (request.bio() != null) {
-            perfil.setBio(request.bio());
+
+        if (bio != null) {
+            perfil.setBio(bio.isBlank() ? null : bio);
         }
-        if (request.privacidadUltimoVisto() != null) {
-            perfil.setPrivacidadUltimoVisto(request.privacidadUltimoVisto());
+
+        if (privacidadUltimoVistoStr != null && !privacidadUltimoVistoStr.isBlank()) {
+            try {
+                perfil.setPrivacidadUltimoVisto(
+                        PrivacidadUltimoVisto.valueOf(privacidadUltimoVistoStr.toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(
+                        "Valor inválido para privacidadUltimoVisto: " + privacidadUltimoVistoStr);
+            }
         }
 
         usuarioRepository.save(usuario);
+
+        if (urlAvatarViejo != null) {
+            storageService.eliminarPorUrl(urlAvatarViejo);
+        }
+
         return construirPerfilResponse(usuario, true);
     }
 

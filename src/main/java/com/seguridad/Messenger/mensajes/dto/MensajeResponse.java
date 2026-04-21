@@ -50,9 +50,6 @@ public record MensajeResponse(
         UbicacionResponse ubicacion,
 
         @Schema(description = "Reacciones agrupadas por emoji.")
-        List<ResumenReaccionesResponse> reacciones,
-
-        @Schema(description = "Datos del mensaje original reenviado. Null si no es un forward.")
-        ForwardResponse reenviaDe
+        List<ResumenReaccionesResponse> reacciones
 
 ) {}

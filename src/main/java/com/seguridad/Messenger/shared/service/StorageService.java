@@ -1,4 +1,4 @@
-package com.seguridad.Messenger.mensajes.service;
+package com.seguridad.Messenger.shared.service;
 
 import com.seguridad.Messenger.config.StorageProperties;
 import com.seguridad.Messenger.shared.enums.TipoMensaje;
@@ -25,6 +25,9 @@ public class StorageService {
     private final StorageProperties props;
 
     private static final Tika TIKA = new Tika();
+
+    private static final Set<String> MIMES_AVATAR = Set.of("image/jpeg", "image/png", "image/webp");
+    private static final long MAX_BYTES_AVATAR = 5L * 1024 * 1024;
 
     private static final Map<TipoMensaje, Set<String>> TIPOS_PERMITIDOS = Map.of(
             TipoMensaje.IMAGEN,    Set.of("image/jpeg", "image/png", "image/webp", "image/gif"),
@@ -83,6 +86,39 @@ public class StorageService {
         }
     }
 
+    public String subirAvatar(MultipartFile avatar) {
+        try {
+            byte[] bytes = avatar.getBytes();
+            String mime = TIKA.detect(bytes);
+
+            if (!MIMES_AVATAR.contains(mime)) {
+                throw new TipoArchivoNoPermitidoException("El avatar debe ser JPEG, PNG o WebP");
+            }
+            if (bytes.length > MAX_BYTES_AVATAR) {
+                throw new ArchivoDemasiadoGrandeException("El avatar no puede superar 5 MB");
+            }
+
+            String objectKey = "avatars/" + UUID.randomUUID() + extensionDesdeMime(mime);
+
+            try (ByteArrayInputStream is = new ByteArrayInputStream(bytes)) {
+                minioClient.putObject(
+                        PutObjectArgs.builder()
+                                .bucket(props.getBucket())
+                                .object(objectKey)
+                                .stream(is, bytes.length, -1)
+                                .contentType(mime)
+                                .build()
+                );
+            }
+            return urlPublica(objectKey);
+
+        } catch (TipoArchivoNoPermitidoException | ArchivoDemasiadoGrandeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Error al subir avatar: " + e.getMessage(), e);
+        }
+    }
+
     public void eliminar(String objectKey) {
         try {
             minioClient.removeObject(
@@ -94,6 +130,13 @@ public class StorageService {
         } catch (Exception e) {
             throw new RuntimeException("Error al eliminar archivo: " + e.getMessage(), e);
         }
+    }
+
+    public void eliminarPorUrl(String url) {
+        if (url == null || url.isBlank()) return;
+        String prefix = props.getPublicUrl() + "/" + props.getBucket() + "/";
+        if (!url.startsWith(prefix)) return;
+        eliminar(url.substring(prefix.length()));
     }
 
     public String urlPublica(String objectKey) {
@@ -126,5 +169,14 @@ public class StorageService {
     private String getExtension(String filename) {
         if (filename == null || !filename.contains(".")) return "";
         return filename.substring(filename.lastIndexOf('.'));
+    }
+
+    private String extensionDesdeMime(String mime) {
+        return switch (mime) {
+            case "image/jpeg" -> ".jpg";
+            case "image/png"  -> ".png";
+            case "image/webp" -> ".webp";
+            default           -> "";
+        };
     }
 }

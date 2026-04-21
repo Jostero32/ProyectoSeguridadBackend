@@ -2,6 +2,7 @@ package com.seguridad.Messenger.conversacion.controller;
 
 import com.seguridad.Messenger.conversacion.dto.*;
 import com.seguridad.Messenger.conversacion.service.ConversacionService;
+import com.seguridad.Messenger.mensajes.service.MensajeService;
 import com.seguridad.Messenger.shared.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -20,13 +21,14 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/conversaciones")
+@RequestMapping("/chats")
 @RequiredArgsConstructor
-@Tag(name = "Conversaciones", description = "Gestión de conversaciones individuales y grupales")
+@Tag(name = "Chats", description = "Gestión de chats individuales y grupales")
 @SecurityRequirement(name = "BearerAuth")
 public class ConversacionController {
 
     private final ConversacionService conversacionService;
+    private final MensajeService mensajeService;
 
     @PostMapping("/individual")
     @Operation(summary = "Crear o recuperar chat individual",
@@ -63,16 +65,16 @@ public class ConversacionController {
     }
 
     @GetMapping
-    @Operation(summary = "Listar mis conversaciones",
-            description = "Devuelve todas las conversaciones donde el usuario es participante, ordenadas por fecha de creación DESC. Las archivadas se excluyen por defecto.")
+    @Operation(summary = "Listar mis chats",
+            description = "Devuelve todos los chats donde el usuario es participante con último mensaje y conteo de no leídos, ordenados por fecha de creación DESC. Los archivados se excluyen por defecto.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Lista de conversaciones")
+            @ApiResponse(responseCode = "200", description = "Lista de chats")
     })
-    public List<ConversacionResponse> listarConversaciones(
+    public List<ChatResumenResponse> listarChats(
             @AuthenticationPrincipal UserPrincipal principal,
-            @Parameter(description = "Incluir conversaciones archivadas en el resultado", example = "false")
+            @Parameter(description = "Incluir chats archivados en el resultado", example = "false")
             @RequestParam(defaultValue = "false") boolean incluirArchivadas) {
-        return conversacionService.listarConversaciones(principal.usuarioId(), incluirArchivadas);
+        return conversacionService.listarChats(principal.usuarioId(), incluirArchivadas);
     }
 
     @GetMapping("/{id}")
@@ -132,6 +134,21 @@ public class ConversacionController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Parameter(description = "ID de la conversación") @PathVariable UUID id) {
         return conversacionService.obtenerConfiguracion(id, principal.usuarioId());
+    }
+
+    @PostMapping("/{id}/leido")
+    @Operation(summary = "Marcar todos los mensajes no leídos de este chat como leídos",
+            description = "El cliente llama a este endpoint al abrir un chat. Marca en bulk todos los mensajes pendientes de lectura para el usuario autenticado.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Mensajes marcados como leídos"),
+            @ApiResponse(responseCode = "403", description = "No eres participante de este chat"),
+            @ApiResponse(responseCode = "404", description = "Chat no encontrado")
+    })
+    public ResponseEntity<Void> marcarTodosLeidos(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID del chat") @PathVariable UUID id) {
+        mensajeService.marcarTodosLeidos(id, principal.usuarioId());
+        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/{id}/configuracion")

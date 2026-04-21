@@ -1,8 +1,8 @@
 package com.seguridad.Messenger.websocket.session;
 
+import com.seguridad.Messenger.conversacion.repository.ParticipanteRepository;
 import com.seguridad.Messenger.shared.enums.PrivacidadUltimoVisto;
 import com.seguridad.Messenger.usuario.model.PerfilUsuario;
-import com.seguridad.Messenger.usuario.repository.ContactoRepository;
 import com.seguridad.Messenger.usuario.repository.PerfilUsuarioRepository;
 import com.seguridad.Messenger.usuario.repository.UsuarioRepository;
 import com.seguridad.Messenger.websocket.dto.PresenciaPayload;
@@ -42,7 +42,7 @@ public class WebSocketSessionRegistry implements ApplicationListener<AbstractSub
     private final WebSocketBroadcastService broadcastService;
     private final EscribiendoService escribiendoService;
     private final PerfilUsuarioRepository perfilUsuarioRepository;
-    private final ContactoRepository contactoRepository;
+    private final ParticipanteRepository participanteRepository;
     private final UsuarioRepository usuarioRepository;
 
     // usuarioId (toString) → conjunto de sessionIds activos
@@ -52,12 +52,12 @@ public class WebSocketSessionRegistry implements ApplicationListener<AbstractSub
             @Lazy WebSocketBroadcastService broadcastService,
             @Lazy EscribiendoService escribiendoService,
             PerfilUsuarioRepository perfilUsuarioRepository,
-            ContactoRepository contactoRepository,
+            ParticipanteRepository participanteRepository,
             UsuarioRepository usuarioRepository) {
         this.broadcastService = broadcastService;
         this.escribiendoService = escribiendoService;
         this.perfilUsuarioRepository = perfilUsuarioRepository;
-        this.contactoRepository = contactoRepository;
+        this.participanteRepository = participanteRepository;
         this.usuarioRepository = usuarioRepository;
     }
 
@@ -91,10 +91,8 @@ public class WebSocketSessionRegistry implements ApplicationListener<AbstractSub
                     sesionesActivas.remove(usuarioIdStr);
                     UUID usuarioId = UUID.fromString(usuarioIdStr);
 
-                    // Cancela timers de escritura activos antes de emitir presencia
                     escribiendoService.limpiarTodosLosTimeouts(usuarioId);
 
-                    // Persiste ultimoVisto en background (best-effort)
                     LocalDateTime ahora = LocalDateTime.now();
                     CompletableFuture.runAsync(() -> {
                         try {
@@ -122,12 +120,6 @@ public class WebSocketSessionRegistry implements ApplicationListener<AbstractSub
 
     // ─── Presencia ────────────────────────────────────────────────────────────
 
-    /**
-     * Emite un evento {@code PRESENCIA} a los destinatarios según la privacidad del usuario.
-     * Best-effort: los errores se loguean y no se propagan.
-     *
-     * @param ultimoVisto null en conexión; timestamp actual en desconexión
-     */
     private void emitirPresencia(UUID usuarioId, boolean conectado, LocalDateTime ultimoVisto) {
         try {
             String username = usuarioRepository.findUsernameById(usuarioId);
@@ -142,17 +134,16 @@ public class WebSocketSessionRegistry implements ApplicationListener<AbstractSub
 
             switch (privacidad) {
                 case TODOS ->
-                    // Notifica a todos los usuarios conectados (excepto al mismo)
                     getUsuariosConectados().stream()
                             .filter(uid -> !uid.equals(usuarioId.toString()))
                             .forEach(uid -> broadcastService.enviarAUsuario(UUID.fromString(uid), evento));
 
                 case CONTACTOS -> {
-                    // Solo notifica a contactos del usuario que estén conectados
-                    List<UUID> contactoIds = contactoRepository.findContactoIdsByUsuarioId(usuarioId);
-                    contactoIds.stream()
+                    List<UUID> relacionados = participanteRepository
+                            .findUsuariosConConversacionIndividual(usuarioId);
+                    relacionados.stream()
                             .filter(this::estaConectado)
-                            .forEach(cid -> broadcastService.enviarAUsuario(cid, evento));
+                            .forEach(uid -> broadcastService.enviarAUsuario(uid, evento));
                 }
 
                 case NADIE -> { /* El usuario no quiere que nadie sepa su presencia */ }

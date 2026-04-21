@@ -60,10 +60,6 @@ public class Mensaje {
     @OneToOne(mappedBy = "mensaje", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private UbicacionMensaje ubicacion;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reenviado_de_id")
-    private Mensaje reenviaDe;
-
     @OneToMany(mappedBy = "mensaje", cascade = CascadeType.ALL, orphanRemoval = true)
     @BatchSize(size = 30)
     private List<Reaccion> reacciones = new ArrayList<>();

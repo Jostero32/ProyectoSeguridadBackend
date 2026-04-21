@@ -15,37 +15,66 @@ import java.util.UUID;
 public interface EstadoMensajeRepository extends JpaRepository<EstadoMensaje, EstadoMensajeId> {
 
     /**
-     * Todos los estados de entrega/lectura de un mensaje (para el remitente).
+     * Todos los estados de entrega/lectura de un mensaje (para mostrar al remitente).
      */
     List<EstadoMensaje> findByIdMensajeId(UUID mensajeId);
 
     /**
-     * Estados existentes de una lista de mensajes para un usuario concreto.
-     * Usado en marcarLeido para detectar qué filas ya existen antes de crear las que faltan.
+     * IDs de mensajes no leídos de una conversación para un usuario.
+     * Usado antes del bulk update para poder emitir los eventos WebSocket.
      */
     @Query("""
-            SELECT e FROM EstadoMensaje e
-            WHERE e.id.mensajeId IN :mensajeIds
-              AND e.id.usuarioId = :usuarioId
+            SELECT e.id.mensajeId FROM EstadoMensaje e
+            WHERE e.id.usuarioId = :usuarioId
+              AND e.leidoEn IS NULL
+              AND e.id.mensajeId IN (
+                  SELECT m.id FROM Mensaje m
+                  WHERE m.conversacion.id = :conversacionId
+                    AND m.remitenteId != :usuarioId
+                    AND m.eliminadoEn IS NULL
+              )
             """)
-    List<EstadoMensaje> findByMensajeIdsAndUsuarioId(
-            @Param("mensajeIds") List<UUID> mensajeIds,
+    List<UUID> findMensajeIdsPendientesDeLectura(
+            @Param("conversacionId") UUID conversacionId,
             @Param("usuarioId") UUID usuarioId);
 
     /**
-     * Bulk update: marca como leídos todos los mensajes indicados para un usuario,
-     * solo si aún no tienen leido_en asignado.
+     * Bulk update: marca como leídos todos los mensajes no leídos de una conversación para un usuario.
      */
     @Modifying
     @Query("""
             UPDATE EstadoMensaje e
             SET e.leidoEn = :ahora
-            WHERE e.id.mensajeId IN :mensajeIds
-              AND e.id.usuarioId = :usuarioId
+            WHERE e.id.usuarioId = :usuarioId
               AND e.leidoEn IS NULL
+              AND e.id.mensajeId IN (
+                  SELECT m.id FROM Mensaje m
+                  WHERE m.conversacion.id = :conversacionId
+                    AND m.remitenteId != :usuarioId
+                    AND m.eliminadoEn IS NULL
+              )
             """)
-    int marcarLeidoBulk(
-            @Param("mensajeIds") List<UUID> mensajeIds,
+    int marcarTodosLeidosPorConversacion(
+            @Param("conversacionId") UUID conversacionId,
             @Param("usuarioId") UUID usuarioId,
             @Param("ahora") LocalDateTime ahora);
+
+    /**
+     * Cuenta los mensajes no leídos de una conversación para un usuario.
+     * Usado en el listado de chats para mostrar el badge de no leídos.
+     */
+    @Query("""
+            SELECT COUNT(e) FROM EstadoMensaje e
+            WHERE e.id.usuarioId = :usuarioId
+              AND e.leidoEn IS NULL
+              AND e.id.mensajeId IN (
+                  SELECT m.id FROM Mensaje m
+                  WHERE m.conversacion.id = :conversacionId
+                    AND m.remitenteId != :usuarioId
+                    AND m.eliminadoEn IS NULL
+              )
+            """)
+    long countNoLeidos(
+            @Param("conversacionId") UUID conversacionId,
+            @Param("usuarioId") UUID usuarioId);
 }

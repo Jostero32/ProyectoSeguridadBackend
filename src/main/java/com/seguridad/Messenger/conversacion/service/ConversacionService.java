@@ -3,11 +3,16 @@ package com.seguridad.Messenger.conversacion.service;
 import com.seguridad.Messenger.conversacion.dto.*;
 import com.seguridad.Messenger.conversacion.model.*;
 import com.seguridad.Messenger.conversacion.repository.*;
+import com.seguridad.Messenger.mensajes.model.Mensaje;
+import com.seguridad.Messenger.mensajes.repository.EstadoMensajeRepository;
+import com.seguridad.Messenger.mensajes.repository.MensajeRepository;
 import com.seguridad.Messenger.shared.enums.RolParticipante;
+import com.seguridad.Messenger.shared.enums.TipoMensaje;
 import com.seguridad.Messenger.shared.enums.TipoConversacion;
 import com.seguridad.Messenger.shared.exception.AccesoDenegadoException;
 import com.seguridad.Messenger.shared.exception.RecursoNoEncontradoException;
 import com.seguridad.Messenger.usuario.model.Usuario;
+import com.seguridad.Messenger.usuario.repository.BloqueoRepository;
 import com.seguridad.Messenger.usuario.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -29,6 +34,9 @@ public class ConversacionService {
     private final ParticipanteRepository participanteRepository;
     private final ConfiguracionChatRepository configuracionChatRepository;
     private final UsuarioRepository usuarioRepository;
+    private final MensajeRepository mensajeRepository;
+    private final EstadoMensajeRepository estadoMensajeRepository;
+    private final BloqueoRepository bloqueoRepository;
 
     // ─── Chat individual ───────────────────────────────────────────────────────
 
@@ -37,10 +45,10 @@ public class ConversacionService {
             throw new IllegalArgumentException("No puedes iniciar un chat contigo mismo");
         }
 
-        // TODO: verificar bloqueo cuando el módulo Bloqueo esté implementado
-        // if (bloqueoRepository.existsBloqueoActivoEnCualquierDireccion(usuarioId, req.destinatarioId())) {
-        //     throw new AccesoDenegadoException("No puedes iniciar una conversación con este usuario");
-        // }
+        if (bloqueoRepository.existsByIdUsuarioIdAndIdBloqueadoId(usuarioId, req.destinatarioId()) ||
+                bloqueoRepository.existsByIdUsuarioIdAndIdBloqueadoId(req.destinatarioId(), usuarioId)) {
+            throw new AccesoDenegadoException("No puedes chatear con este usuario");
+        }
 
         String hash = generarCanalHash(usuarioId, req.destinatarioId());
 
@@ -112,7 +120,7 @@ public class ConversacionService {
     // ─── Listar / Detalle ──────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<ConversacionResponse> listarConversaciones(UUID usuarioId, boolean incluirArchivadas) {
+    public List<ChatResumenResponse> listarChats(UUID usuarioId, boolean incluirArchivadas) {
         List<Conversacion> conversaciones = conversacionRepository.findConversacionesConDetalles(usuarioId);
 
         if (!incluirArchivadas) {
@@ -128,7 +136,7 @@ public class ConversacionService {
         }
 
         return conversaciones.stream()
-                .map(c -> toConversacionResponse(c, usuarioId))
+                .map(c -> toChatResumenResponse(c, usuarioId))
                 .collect(Collectors.toList());
     }
 
@@ -323,6 +331,66 @@ public class ConversacionService {
                 .sorted()
                 .collect(Collectors.joining(":"));
         return DigestUtils.sha256Hex(sorted);
+    }
+
+    private ChatResumenResponse toChatResumenResponse(Conversacion c, UUID usuarioId) {
+        String titulo;
+        String urlAvatar;
+
+        if (c.getTipo() == TipoConversacion.INDIVIDUAL) {
+            Participante otro = c.getParticipantes().stream()
+                    .filter(p -> !p.getId().getUsuarioId().equals(usuarioId))
+                    .findFirst()
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Participante no encontrado"));
+            Usuario otroUsuario = otro.getUsuario();
+            titulo = otroUsuario.getPersona().getNombres() + " " + otroUsuario.getPersona().getApellidos();
+            urlAvatar = otroUsuario.getPerfil() != null ? otroUsuario.getPerfil().getUrlAvatar() : null;
+        } else {
+            titulo = c.getTituloGrupo();
+            urlAvatar = c.getUrlAvatarGrupo();
+        }
+
+        boolean esAdmin = c.getParticipantes().stream()
+                .anyMatch(p -> p.getId().getUsuarioId().equals(usuarioId)
+                        && p.getRol() == RolParticipante.ADMIN);
+
+        UltimoMensajeResponse ultimoMensajeDto = mensajeRepository
+                .findTopByConversacionIdOrderByCreadoEnDesc(c.getId())
+                .map(m -> new UltimoMensajeResponse(
+                        m.getId(),
+                        m.getRemitenteId(),
+                        usuarioRepository.findUsernameById(m.getRemitenteId()),
+                        m.getTipo(),
+                        generarPreview(m),
+                        m.getCreadoEn(),
+                        m.isEliminadoParaTodos()
+                ))
+                .orElse(null);
+
+        int noLeidos = (int) estadoMensajeRepository.countNoLeidos(c.getId(), usuarioId);
+
+        return new ChatResumenResponse(
+                c.getId(), c.getTipo(), titulo, urlAvatar, c.getCreadaEn(), esAdmin,
+                ultimoMensajeDto, noLeidos);
+    }
+
+    private String generarPreview(Mensaje m) {
+        if (m.isEliminadoParaTodos()) return "Mensaje eliminado";
+        return switch (m.getTipo()) {
+            case TEXTO     -> truncar(m.getContenidoCifrado(), 60);
+            case IMAGEN    -> "Foto";
+            case VIDEO     -> "Video";
+            case AUDIO     -> "Audio";
+            case DOCUMENTO -> "Documento";
+            case STICKER   -> "Sticker";
+            case GIF       -> "GIF";
+            case UBICACION -> "Ubicación";
+        };
+    }
+
+    private String truncar(String texto, int max) {
+        if (texto == null) return "";
+        return texto.length() <= max ? texto : texto.substring(0, max) + "...";
     }
 
     private ConversacionResponse toConversacionResponse(Conversacion c, UUID usuarioId) {

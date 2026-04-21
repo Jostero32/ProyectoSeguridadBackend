@@ -8,15 +8,14 @@ import org.springframework.data.repository.query.Param;
 
 import com.seguridad.Messenger.mensajes.model.Mensaje;
 
-import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
 
     /**
      * Historial paginado de una conversación.
-     * Excluye mensajes eliminados para todos; incluye los eliminados solo para sí mismo.
-     * Ordenado por creado_en DESC (más recientes primero).
+     * Excluye mensajes eliminados para todos. Ordenado por creado_en DESC.
      */
     @Query("""
             SELECT m FROM Mensaje m
@@ -29,23 +28,12 @@ public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
             Pageable pageable);
 
     /**
-     * Filtra mensajes válidos para marcar como leídos:
-     * deben pertenecer a la conversación y no haber sido enviados por el usuario.
+     * Último mensaje de una conversación — usado para el preview en el listado de chats.
      */
-    @Query("""
-            SELECT m FROM Mensaje m
-            WHERE m.id IN :mensajeIds
-              AND m.conversacion.id = :conversacionId
-              AND m.remitenteId != :usuarioId
-            """)
-    List<Mensaje> findValidosParaLeer(
-            @Param("conversacionId") UUID conversacionId,
-            @Param("usuarioId") UUID usuarioId,
-            @Param("mensajeIds") List<UUID> mensajeIds);
+    Optional<Mensaje> findTopByConversacionIdOrderByCreadoEnDesc(UUID conversacionId);
 
     /**
-     * Devuelve solo el remitenteId de un mensaje — usado por el broadcast de estado de entrega
-     * para saber a qué usuario enviar la notificación vía /user/queue/notificaciones.
+     * Devuelve solo el remitenteId de un mensaje — usado por el broadcast de estado de entrega.
      */
     @Query("SELECT m.remitenteId FROM Mensaje m WHERE m.id = :mensajeId")
     UUID findRemitenteId(@Param("mensajeId") UUID mensajeId);

@@ -14,6 +14,7 @@ import com.seguridad.Messenger.mensajes.repository.EstadoMensajeRepository;
 import com.seguridad.Messenger.mensajes.repository.MensajeRepository;
 import com.seguridad.Messenger.mensajes.repository.ReaccionRepository;
 import com.seguridad.Messenger.shared.enums.TipoMensaje;
+import com.seguridad.Messenger.shared.service.StorageService;
 import com.seguridad.Messenger.shared.exception.AccesoDenegadoException;
 import com.seguridad.Messenger.shared.exception.RecursoNoEncontradoException;
 import com.seguridad.Messenger.websocket.dto.EstadoEntregaEventPayload;
@@ -32,7 +33,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -205,52 +205,21 @@ public class MensajeService {
         mensajeRepository.save(mensaje);
     }
 
-    // ─── Marcar como leído (batch) ────────────────────────────────────────────
+    // ─── Marcar como leídos ──────────────────────────────────────────────────
 
-    public void marcarLeido(UUID conversacionId, UUID usuarioId, MarcarLeidoRequest req) {
+    public void marcarTodosLeidos(UUID conversacionId, UUID usuarioId) {
         verificarParticipante(conversacionId, usuarioId);
 
-        List<UUID> mensajeIds = req.mensajeIds();
+        List<UUID> pendientes = estadoMensajeRepository
+                .findMensajeIdsPendientesDeLectura(conversacionId, usuarioId);
 
-        List<Mensaje> mensajesValidos = mensajeRepository.findValidosParaLeer(
-                conversacionId, usuarioId, mensajeIds);
-
-        if (mensajesValidos.isEmpty()) {
-            return;
-        }
-
-        List<UUID> validIds = mensajesValidos.stream()
-                .map(Mensaje::getId)
-                .collect(Collectors.toList());
+        if (pendientes.isEmpty()) return;
 
         LocalDateTime ahora = LocalDateTime.now();
+        estadoMensajeRepository.marcarTodosLeidosPorConversacion(conversacionId, usuarioId, ahora);
 
-        estadoMensajeRepository.marcarLeidoBulk(validIds, usuarioId, ahora);
-
-        Set<UUID> existentes = estadoMensajeRepository
-                .findByMensajeIdsAndUsuarioId(validIds, usuarioId)
-                .stream()
-                .map(e -> e.getId().getMensajeId())
-                .collect(Collectors.toSet());
-
-        List<EstadoMensaje> nuevos = mensajesValidos.stream()
-                .filter(m -> !existentes.contains(m.getId()))
-                .map(m -> {
-                    EstadoMensaje e = new EstadoMensaje();
-                    e.setId(new EstadoMensajeId(m.getId(), usuarioId));
-                    e.setEntregadoEn(ahora);
-                    e.setLeidoEn(ahora);
-                    return e;
-                })
-                .collect(Collectors.toList());
-
-        if (!nuevos.isEmpty()) {
-            estadoMensajeRepository.saveAll(nuevos);
-        }
-
-        // Notificar al remitente de cada mensaje que fue leído
-        validIds.forEach(id -> eventPublisher.publishEvent(new EstadoEntregaEvent(
-                new EstadoEntregaEventPayload(id, conversacionId, usuarioId, null, ahora)
+        pendientes.forEach(mensajeId -> eventPublisher.publishEvent(new EstadoEntregaEvent(
+                new EstadoEntregaEventPayload(mensajeId, conversacionId, usuarioId, null, ahora)
         )));
     }
 
@@ -328,56 +297,6 @@ public class MensajeService {
                         r.getEmoji(),
                         r.getCreadaEn()))
                 .toList();
-    }
-
-    // ─── Forward ──────────────────────────────────────────────────────────────
-
-    public MensajeResponse forward(UUID conversacionId, UUID mensajeIdOrigen, UUID usuarioId) {
-        verificarParticipante(conversacionId, usuarioId);
-
-        Mensaje original = cargarMensaje(mensajeIdOrigen);
-        verificarMensajeEnConversacion(original, conversacionId);
-
-        if (original.isEliminadoParaTodos()) {
-            throw new IllegalStateException("No se puede reenviar un mensaje eliminado para todos");
-        }
-
-        // Romper cadena: si el original ya es un forward, referenciar su origen
-        UUID idAReferenciar = original.getReenviaDe() != null
-                ? original.getReenviaDe().getId()
-                : original.getId();
-
-        Mensaje forwardMsg = new Mensaje();
-        forwardMsg.setConversacion(conversacionRepository.getReferenceById(conversacionId));
-        forwardMsg.setRemitenteId(usuarioId);
-        forwardMsg.setReenviaDe(mensajeRepository.getReferenceById(idAReferenciar));
-        forwardMsg.setTipo(original.getTipo());
-        forwardMsg.setContenidoCifrado(null);
-        forwardMsg.setCreadoEn(LocalDateTime.now());
-        forwardMsg.setEliminadoParaTodos(false);
-
-        final Mensaje forwardGuardado = mensajeRepository.save(forwardMsg);
-
-        LocalDateTime ahora = LocalDateTime.now();
-        List<UUID> receptores = participanteRepository
-                .findUsuarioIdsByConversacionExcluyendo(conversacionId, usuarioId);
-
-        List<EstadoMensaje> estados = receptores.stream()
-                .map(receptorId -> {
-                    EstadoMensaje e = new EstadoMensaje();
-                    e.setId(new EstadoMensajeId(forwardGuardado.getId(), receptorId));
-                    e.setEntregadoEn(ahora);
-                    return e;
-                })
-                .collect(Collectors.toList());
-
-        if (!estados.isEmpty()) {
-            estadoMensajeRepository.saveAll(estados);
-        }
-
-        MensajeResponse response = toResponse(forwardGuardado, usuarioId, conversacionId);
-        eventPublisher.publishEvent(new MensajeEnviadoEvent(response));
-        return response;
     }
 
     // ─── Helpers privados ─────────────────────────────────────────────────────
@@ -474,19 +393,6 @@ public class MensajeService {
         List<ResumenReaccionesResponse> resumenReacciones =
                 construirResumenReacciones(mensaje.getReacciones(), usuarioId);
 
-        // Forward — datos del mensaje original
-        ForwardResponse forwardResp = null;
-        if (mensaje.getReenviaDe() != null) {
-            Mensaje orig = mensaje.getReenviaDe();
-            forwardResp = new ForwardResponse(
-                    orig.getId(),
-                    orig.getRemitenteId(),
-                    orig.isEliminadoParaTodos() ? null : orig.getContenidoCifrado(),
-                    orig.getTipo(),
-                    orig.getEliminadoEn() != null
-            );
-        }
-
         return new MensajeResponse(
                 mensaje.getId(),
                 conversacionId,
@@ -501,8 +407,7 @@ public class MensajeService {
                 estados,
                 archivoResp,
                 ubicacionResp,
-                resumenReacciones,
-                forwardResp
+                resumenReacciones
         );
     }
 }

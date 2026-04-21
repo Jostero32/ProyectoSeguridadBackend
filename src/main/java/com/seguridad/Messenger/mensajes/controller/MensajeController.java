@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/conversaciones/{conversacionId}/mensajes")
+@RequestMapping("/chats/{conversacionId}/mensajes")
 @RequiredArgsConstructor
 @Validated
 @Tag(name = "Mensajes", description = "Envío, edición, eliminación y lectura de mensajes. " +
@@ -204,48 +204,4 @@ public class MensajeController {
         return mensajeService.listarReacciones(conversacionId, mensajeId, principal.usuarioId());
     }
 
-    // ─── Forward ──────────────────────────────────────────────────────────────
-
-    @PostMapping("/{mensajeId}/forward")
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Reenviar mensaje dentro de la misma conversación",
-            description = "Crea un nuevo mensaje que referencia al mensaje original. " +
-                    "El contenido no se copia — se lee del mensaje original. " +
-                    "Si el mensaje original ya es un forward, el nuevo forward apunta al origen de la cadena. " +
-                    "El campo `reenviaDe.contenido` será null si el original fue eliminado para todos.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Mensaje reenviado"),
-            @ApiResponse(responseCode = "400", description = "El mensaje original fue eliminado para todos"),
-            @ApiResponse(responseCode = "403", description = "No eres participante de la conversación"),
-            @ApiResponse(responseCode = "404", description = "Mensaje no encontrado")
-    })
-    public MensajeResponse forward(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
-            @Parameter(description = "ID del mensaje a reenviar") @PathVariable UUID mensajeId) {
-        return mensajeService.forward(conversacionId, mensajeId, principal.usuarioId());
-    }
-
-    // ─── Marcar como leído ────────────────────────────────────────────────────
-
-    @PostMapping("/{mensajeId}/leido")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Marcar mensajes como leídos (batch)",
-            description = "Marca uno o varios mensajes como leídos en un solo request. " +
-                    "Se ignoran los IDs que no pertenezcan a la conversación o que correspondan a mensajes del propio usuario. " +
-                    "Si el estado de entrega no existía, se crea con entregado_en = leido_en = ahora.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Mensajes marcados como leídos"),
-            @ApiResponse(responseCode = "400", description = "Lista de mensajes vacía"),
-            @ApiResponse(responseCode = "403", description = "No eres participante de la conversación"),
-            @ApiResponse(responseCode = "404", description = "Conversación no encontrada")
-    })
-    public void marcarLeido(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
-            @Parameter(description = "ID del mensaje (requerido por la ruta, los IDs reales van en el body)")
-            @PathVariable UUID mensajeId,
-            @Valid @RequestBody MarcarLeidoRequest req) {
-        mensajeService.marcarLeido(conversacionId, principal.usuarioId(), req);
-    }
 }

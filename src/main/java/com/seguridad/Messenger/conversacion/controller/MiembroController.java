@@ -20,9 +20,9 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/conversaciones/{conversacionId}/miembros")
+@RequestMapping("/chats/{conversacionId}/miembros")
 @RequiredArgsConstructor
-@Tag(name = "Miembros", description = "Gestión de miembros en conversaciones grupales")
+@Tag(name = "Miembros", description = "Gestión de miembros en chats grupales")
 @SecurityRequirement(name = "BearerAuth")
 public class MiembroController {
 

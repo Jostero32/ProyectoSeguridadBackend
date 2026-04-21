@@ -61,4 +61,15 @@ public interface ParticipanteRepository extends JpaRepository<Participante, Part
             @Param("conversacionId") UUID conversacionId,
             @Param("usuarioId") UUID usuarioId,
             Pageable pageable);
+
+    @Query("""
+            SELECT p2.id.usuarioId
+            FROM Participante p1
+            JOIN Participante p2 ON p2.id.conversacionId = p1.id.conversacionId
+            JOIN Conversacion c ON c.id = p1.id.conversacionId
+            WHERE p1.id.usuarioId = :usuarioId
+              AND p2.id.usuarioId != :usuarioId
+              AND c.tipo = 'INDIVIDUAL'
+            """)
+    List<UUID> findUsuariosConConversacionIndividual(@Param("usuarioId") UUID usuarioId);
 }

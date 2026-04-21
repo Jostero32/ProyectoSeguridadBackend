@@ -22,4 +22,7 @@ public interface PerfilUsuarioRepository extends JpaRepository<PerfilUsuario, UU
     @Query("UPDATE PerfilUsuario p SET p.ultimoVisto = :ahora WHERE p.id = :usuarioId")
     void actualizarUltimoVisto(@Param("usuarioId") UUID usuarioId,
                                @Param("ahora") LocalDateTime ahora);
+
+    @Query("SELECT p.urlAvatar FROM PerfilUsuario p WHERE p.id = :id")
+    String findUrlAvatarById(@Param("id") UUID id);
 }

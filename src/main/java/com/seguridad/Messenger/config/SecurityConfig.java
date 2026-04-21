@@ -41,7 +41,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/usuarios/registro").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs", "/api-docs/**", "/v3/api-docs", "/v3/api-docs/**").permitAll()
-                        .requestMatchers("/ws/**").permitAll()   // handshake HTTP público; auth real en STOMP CONNECT
+                        .requestMatchers("/ws/**", "/ws-sockjs/**").permitAll()   // handshake HTTP público; auth real en STOMP CONNECT
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
