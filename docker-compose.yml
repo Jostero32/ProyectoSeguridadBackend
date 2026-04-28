@@ -46,6 +46,7 @@ services:
       STORAGE_ACCESS_KEY: minioadmin
       STORAGE_SECRET_KEY: minioadmin
       STORAGE_BUCKET: messenger-archivos
+      STORAGE_BUCKET_AVATARS: messenger-avatars
       STORAGE_PUBLIC_URL: http://localhost:9000
     depends_on:
       postgres:

@@ -31,8 +31,8 @@ public class PerfilUsuario {
     @JoinColumn(name = "usuario_id")
     private Usuario usuario;
 
-    @Column(name = "avatar_key")
-    private String avatarKey;
+    @Column(name = "url_avatar")
+    private String urlAvatar;
 
     @Column(length = 160)
     private String bio;

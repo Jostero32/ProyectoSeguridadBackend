@@ -30,8 +30,11 @@ public class ArchivoController {
      * Genera una presigned URL válida 24h y redirige al cliente hacia ella.
      * El cliente descarga el archivo directamente desde MinIO con la URL firmada.
      *
+     * Solo se usa para archivos privados de mensajes (bucket {@code messenger-archivos}).
+     * Los avatares viven en un bucket público y se sirven directamente desde MinIO,
+     * no por este controller.
+     *
      * Rutas:
-     *   GET /archivos/avatars/abc.webp
      *   GET /archivos/imagen/abc.jpg
      *   GET /archivos/documento/abc.pdf
      */

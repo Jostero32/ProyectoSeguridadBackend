@@ -1,7 +1,6 @@
 package com.seguridad.Messenger.websocket.service;
 
 import com.seguridad.Messenger.conversacion.repository.ParticipanteRepository;
-import com.seguridad.Messenger.mensajes.dto.MensajeResponse;
 import com.seguridad.Messenger.mensajes.repository.MensajeRepository;
 import com.seguridad.Messenger.websocket.dto.WebSocketEvent;
 import com.seguridad.Messenger.websocket.event.EstadoEntregaEvent;
@@ -15,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -22,25 +22,65 @@ import java.util.UUID;
  *
  * Todos los listeners son best-effort: si falla el broadcast, se loguea como warning
  * y no se propaga la excepción — el cliente puede recuperar el estado via REST.
+ *
+ * Diseño: canal único por usuario en {@code /user/{id}/queue/eventos}. El broker no
+ * valida suscripciones a topics, así que cualquier cliente con un UUID podía
+ * suscribirse a {@code /topic/conversacion.{id}}. Se eliminó el topic por
+ * conversación y todo se envía individualmente a cada participante conectado.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class WebSocketBroadcastService {
 
+    private static final String DESTINO_USUARIO = "/queue/eventos";
+
     private final SimpMessagingTemplate messagingTemplate;
     private final ParticipanteRepository participanteRepo;
     private final MensajeRepository mensajeRepository;
     private final WebSocketSessionRegistry sessionRegistry;
+
+    // ─── Envío directo a un usuario ──────────────────────────────────────────
+
+    /**
+     * Envía un evento al canal personal del usuario:
+     * {@code /user/{usuarioId}/queue/eventos}.
+     */
+    public void enviarAUsuario(UUID usuarioId, WebSocketEvent<?> evento) {
+        messagingTemplate.convertAndSendToUser(
+                usuarioId.toString(),
+                DESTINO_USUARIO,
+                evento
+        );
+    }
+
+    // ─── Broadcast a participantes de una conversación ───────────────────────
+
+    /**
+     * Envía el evento a cada participante conectado de la conversación a su
+     * cola personal. Reemplaza el broadcast a {@code /topic/conversacion.{id}}.
+     * Los usuarios desconectados se omiten — no acumulamos eventos en el broker.
+     */
+    public void broadcastAConversacion(UUID conversacionId, WebSocketEvent<?> evento) {
+        List<UUID> participantes = participanteRepo.findUsuarioIdsByConversacionId(conversacionId);
+        for (UUID uid : participantes) {
+            if (sessionRegistry.estaConectado(uid)) {
+                enviarAUsuario(uid, evento);
+            }
+        }
+    }
 
     // ─── Listener: mensaje nuevo ──────────────────────────────────────────────
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onMensajeEnviado(MensajeEnviadoEvent event) {
         try {
-            broadcastMensaje(event.mensaje());
+            broadcastAConversacion(
+                    event.mensaje().conversacionId(),
+                    new WebSocketEvent<>("NUEVO_MENSAJE", event.mensaje())
+            );
         } catch (Exception e) {
-            log.warn("Error en broadcast de mensaje nuevo conversacionId={}: {}",
+            log.warn("Error en broadcast NUEVO_MENSAJE conversacionId={}: {}",
                     event.mensaje().conversacionId(), e.getMessage());
         }
     }
@@ -50,12 +90,12 @@ public class WebSocketBroadcastService {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onReaccion(ReaccionEvent event) {
         try {
-            messagingTemplate.convertAndSend(
-                    "/topic/conversacion." + event.payload().conversacionId(),
+            broadcastAConversacion(
+                    event.payload().conversacionId(),
                     new WebSocketEvent<>(event.tipo(), event.payload())
             );
         } catch (Exception e) {
-            log.warn("Error en broadcast de reacción mensajeId={}: {}",
+            log.warn("Error en broadcast reacción mensajeId={}: {}",
                     event.payload().mensajeId(), e.getMessage());
         }
     }
@@ -74,31 +114,8 @@ public class WebSocketBroadcastService {
                 enviarAUsuario(remitenteId, new WebSocketEvent<>("ESTADO_ENTREGA", event.payload()));
             }
         } catch (Exception e) {
-            log.warn("Error en broadcast de estado de entrega mensajeId={}: {}",
+            log.warn("Error en broadcast ESTADO_ENTREGA mensajeId={}: {}",
                     event.payload().mensajeId(), e.getMessage());
         }
-    }
-
-    // ─── Broadcast a topic de conversación ───────────────────────────────────
-
-    public void broadcastMensaje(MensajeResponse mensaje) {
-        messagingTemplate.convertAndSend(
-                "/topic/conversacion." + mensaje.conversacionId(),
-                new WebSocketEvent<>("NUEVO_MENSAJE", mensaje)
-        );
-    }
-
-    // ─── Cola personal por usuario ────────────────────────────────────────────
-
-    /**
-     * Envía un evento privado al usuario. El destino resuelto es
-     * {@code /user/{usuarioId}/queue/notificaciones}.
-     */
-    public void enviarAUsuario(UUID usuarioId, WebSocketEvent<?> evento) {
-        messagingTemplate.convertAndSendToUser(
-                usuarioId.toString(),
-                "/queue/notificaciones",
-                evento
-        );
     }
 }

@@ -48,6 +48,32 @@ public interface ParticipanteRepository extends JpaRepository<Participante, Part
             @Param("excludeId") UUID excludeId);
 
     /**
+     * Devuelve los IDs de usuario de todos los participantes de una conversación.
+     * Usado por el broadcast WebSocket para enviar eventos individualmente a cada
+     * participante en su cola personal {@code /user/{id}/queue/eventos}.
+     */
+    @Query("""
+            SELECT p.id.usuarioId FROM Participante p
+            WHERE p.id.conversacionId = :conversacionId
+            """)
+    List<UUID> findUsuarioIdsByConversacionId(@Param("conversacionId") UUID conversacionId);
+
+    /**
+     * Devuelve el UUID del otro participante en una conversación INDIVIDUAL
+     * (la que tiene exactamente 2 miembros). Usado para validar bloqueo entre
+     * los dos usuarios antes de aceptar mensajes.
+     * Devuelve {@code Optional.empty()} si no hay otro participante.
+     */
+    @Query("""
+            SELECT p.id.usuarioId FROM Participante p
+            WHERE p.id.conversacionId = :conversacionId
+              AND p.id.usuarioId != :usuarioId
+            """)
+    Optional<UUID> findOtroParticipante(
+            @Param("conversacionId") UUID conversacionId,
+            @Param("usuarioId") UUID usuarioId);
+
+    /**
      * Devuelve los miembros de una conversación excluyendo a un usuario, ordenados por fecha_union ASC.
      * Usado para promover al miembro más antiguo cuando el último admin abandona.
      */

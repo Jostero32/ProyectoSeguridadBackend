@@ -1,6 +1,5 @@
 package com.seguridad.Messenger.websocket.session;
 
-import com.seguridad.Messenger.conversacion.repository.ParticipanteRepository;
 import com.seguridad.Messenger.shared.enums.PrivacidadUltimoVisto;
 import com.seguridad.Messenger.usuario.model.PerfilUsuario;
 import com.seguridad.Messenger.usuario.repository.PerfilUsuarioRepository;
@@ -20,7 +19,6 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -42,7 +40,6 @@ public class WebSocketSessionRegistry implements ApplicationListener<AbstractSub
     private final WebSocketBroadcastService broadcastService;
     private final EscribiendoService escribiendoService;
     private final PerfilUsuarioRepository perfilUsuarioRepository;
-    private final ParticipanteRepository participanteRepository;
     private final UsuarioRepository usuarioRepository;
 
     // usuarioId (toString) → conjunto de sessionIds activos
@@ -52,12 +49,10 @@ public class WebSocketSessionRegistry implements ApplicationListener<AbstractSub
             @Lazy WebSocketBroadcastService broadcastService,
             @Lazy EscribiendoService escribiendoService,
             PerfilUsuarioRepository perfilUsuarioRepository,
-            ParticipanteRepository participanteRepository,
             UsuarioRepository usuarioRepository) {
         this.broadcastService = broadcastService;
         this.escribiendoService = escribiendoService;
         this.perfilUsuarioRepository = perfilUsuarioRepository;
-        this.participanteRepository = participanteRepository;
         this.usuarioRepository = usuarioRepository;
     }
 
@@ -129,25 +124,15 @@ public class WebSocketSessionRegistry implements ApplicationListener<AbstractSub
                     .map(PerfilUsuario::getPrivacidadUltimoVisto)
                     .orElse(PrivacidadUltimoVisto.TODOS);
 
+            if (privacidad == PrivacidadUltimoVisto.NADIE) return;
+
             PresenciaPayload payload = new PresenciaPayload(usuarioId, username, conectado, ultimoVisto);
             WebSocketEvent<PresenciaPayload> evento = new WebSocketEvent<>("PRESENCIA", payload);
 
-            switch (privacidad) {
-                case TODOS ->
-                    getUsuariosConectados().stream()
-                            .filter(uid -> !uid.equals(usuarioId.toString()))
-                            .forEach(uid -> broadcastService.enviarAUsuario(UUID.fromString(uid), evento));
-
-                case CONTACTOS -> {
-                    List<UUID> relacionados = participanteRepository
-                            .findUsuariosConConversacionIndividual(usuarioId);
-                    relacionados.stream()
-                            .filter(this::estaConectado)
-                            .forEach(uid -> broadcastService.enviarAUsuario(uid, evento));
-                }
-
-                case NADIE -> { /* El usuario no quiere que nadie sepa su presencia */ }
-            }
+            // Privacidad TODOS: emite a cualquier usuario conectado (excepto a sí mismo).
+            getUsuariosConectados().stream()
+                    .filter(uid -> !uid.equals(usuarioId.toString()))
+                    .forEach(uid -> broadcastService.enviarAUsuario(UUID.fromString(uid), evento));
         } catch (Exception e) {
             log.warn("Error emitiendo presencia usuario={}: {}", usuarioId, e.getMessage());
         }

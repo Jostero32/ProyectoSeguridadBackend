@@ -19,10 +19,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // Broker en memoria — suficiente para un solo nodo
-        registry.enableSimpleBroker("/topic", "/queue");
+        // Broker en memoria — suficiente para un solo nodo.
+        // Solo /queue: todo el tráfico pasa por la cola personal del usuario
+        // (/user/{id}/queue/eventos), evitando que el broker enrute eventos a
+        // suscriptores no autorizados que conozcan el UUID de una conversación.
+        registry.enableSimpleBroker("/queue");
 
-        // Prefijo para @MessageMapping (el cliente envía por REST en v1)
+        // Prefijo para @MessageMapping (escribiendo, dejo-de-escribir)
         registry.setApplicationDestinationPrefixes("/app");
 
         // Prefijo para destinos personales /user/queue/...

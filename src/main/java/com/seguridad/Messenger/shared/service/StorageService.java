@@ -86,7 +86,11 @@ public class StorageService {
     }
 
     /**
-     * Sube un avatar. Devuelve el object_key (no la URL).
+     * Sube un avatar al bucket público de avatares y devuelve la URL pública directa.
+     * Esta URL apunta a MinIO sin pasar por el servidor — los clientes pueden mostrar
+     * avatares en listas sin generar requests autenticados al backend.
+     * El bucket {@code storage.bucket-avatars} se configura con política de solo lectura
+     * pública en {@code StorageConfig}.
      */
     public String subirAvatar(MultipartFile avatar) {
         try {
@@ -100,9 +104,9 @@ public class StorageService {
                 throw new ArchivoDemasiadoGrandeException("El avatar no puede superar 5 MB");
             }
 
-            String objectKey = "avatars/" + UUID.randomUUID() + extensionDesdeMime(mime);
-            putObject(objectKey, bytes, mime);
-            return objectKey;
+            String objectKey = UUID.randomUUID() + extensionDesdeMime(mime);
+            putObjectAvatar(objectKey, bytes, mime);
+            return urlPublicaAvatar(objectKey);
 
         } catch (TipoArchivoNoPermitidoException | ArchivoDemasiadoGrandeException e) {
             throw e;
@@ -147,6 +151,28 @@ public class StorageService {
         }
     }
 
+    /**
+     * Elimina un avatar dado su URL pública. Extrae el objectKey del último segmento
+     * de la URL — el bucket de avatares es plano (sin prefijos), así que el último
+     * segmento de la URL es siempre el nombre del objeto.
+     */
+    public void eliminarAvatar(String urlPublica) {
+        if (urlPublica == null || urlPublica.isBlank()) return;
+        int barra = urlPublica.lastIndexOf('/');
+        if (barra < 0 || barra == urlPublica.length() - 1) return;
+        String objectKey = urlPublica.substring(barra + 1);
+        try {
+            minioClient.removeObject(
+                    RemoveObjectArgs.builder()
+                            .bucket(props.getBucketAvatars())
+                            .object(objectKey)
+                            .build()
+            );
+        } catch (Exception e) {
+            log.warn("Error eliminando avatar {}: {}", objectKey, e.getMessage());
+        }
+    }
+
     // ─── PRIVADOS ─────────────────────────────────────────────────────────────
 
     private void putObject(String objectKey, byte[] bytes, String mimeType) {
@@ -162,6 +188,31 @@ public class StorageService {
         } catch (Exception e) {
             throw new RuntimeException("Error al subir objeto a MinIO: " + e.getMessage(), e);
         }
+    }
+
+    private void putObjectAvatar(String objectKey, byte[] bytes, String mimeType) {
+        try (ByteArrayInputStream is = new ByteArrayInputStream(bytes)) {
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(props.getBucketAvatars())
+                            .object(objectKey)
+                            .stream(is, bytes.length, -1)
+                            .contentType(mimeType)
+                            .build()
+            );
+        } catch (Exception e) {
+            throw new RuntimeException("Error al subir avatar a MinIO: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Construye la URL pública del avatar usando {@code storage.public-url} (la URL
+     * accesible desde el cliente) — distinta de {@code storage.endpoint}, que apunta
+     * al hostname interno de la red Docker.
+     */
+    private String urlPublicaAvatar(String objectKey) {
+        String base = props.getPublicUrl() != null ? props.getPublicUrl() : props.getEndpoint();
+        return base + "/" + props.getBucketAvatars() + "/" + objectKey;
     }
 
     private void validarContentType(String mimeDetectado, TipoMensaje tipo) {

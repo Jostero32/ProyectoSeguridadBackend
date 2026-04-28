@@ -2,9 +2,9 @@ package com.seguridad.Messenger.websocket.service;
 
 import com.seguridad.Messenger.websocket.dto.EscribiendoPayload;
 import com.seguridad.Messenger.websocket.dto.WebSocketEvent;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -13,6 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Gestiona el indicador de escritura por conversación y usuario.
@@ -20,19 +21,27 @@ import java.util.concurrent.TimeUnit;
  * Cada llamada a {@link #usuarioEscribiendo} reinicia un timer de 4 segundos.
  * Si el timer expira sin que el usuario llame a {@link #usuarioDejoDeEscribir},
  * se emite automáticamente {@code DEJO_DE_ESCRIBIR}.
+ *
+ * El broadcast llega a cada participante de la conversación vía
+ * {@link WebSocketBroadcastService#broadcastAConversacion}.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class EscribiendoService {
 
-    private final SimpMessagingTemplate messagingTemplate;
+    private final WebSocketBroadcastService broadcastService;
 
-    // Timer daemon para expiración automática de timeouts de escritura
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "escribiendo-scheduler");
-        t.setDaemon(true);
-        return t;
+    // Pool de hilos daemon para timeouts concurrentes (un hilo único era cuello de botella)
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4, new java.util.concurrent.ThreadFactory() {
+        private final AtomicInteger contador = new AtomicInteger(1);
+
+        @Override
+        public Thread newThread(Runnable r) {
+            Thread t = new Thread(r, "escribiendo-scheduler-" + contador.getAndIncrement());
+            t.setDaemon(true);
+            return t;
+        }
     });
 
     // "conversacionId:usuarioId" → ScheduledFuture del DEJO_DE_ESCRIBIR automático
@@ -85,10 +94,16 @@ public class EscribiendoService {
         });
     }
 
+    @PreDestroy
+    public void shutdown() {
+        scheduler.shutdownNow();
+        log.info("EscribiendoService scheduler detenido");
+    }
+
     private void emitir(String tipo, UUID conversacionId, UUID usuarioId, String username) {
         try {
-            messagingTemplate.convertAndSend(
-                    "/topic/conversacion." + conversacionId,
+            broadcastService.broadcastAConversacion(
+                    conversacionId,
                     new WebSocketEvent<>(tipo, new EscribiendoPayload(conversacionId, usuarioId, username))
             );
         } catch (Exception e) {

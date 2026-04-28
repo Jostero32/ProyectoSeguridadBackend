@@ -13,12 +13,15 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+
 /**
  * Intercepta el frame STOMP CONNECT y valida el token Bearer.
  * Si el token es válido, establece el {@code Principal} de la sesión WebSocket
  * usando {@code UserPrincipal}, que Spring usa para enrutar /user/queue/... correctamente.
- * Si el token es inválido o está ausente, lanza {@code MessagingException},
- * que Spring STOMP convierte en un frame ERROR y cierra la conexión.
+ * Si el token es inválido, está ausente o ha expirado (30 días sin uso),
+ * lanza {@code MessagingException}, que Spring STOMP convierte en un frame ERROR
+ * y cierra la conexión.
  */
 @Component
 @RequiredArgsConstructor
@@ -43,7 +46,12 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             String token = authHeader.substring(7);
 
             DispositivoSesion sesion = sesionRepo.findByTokenSesion(token)
-                    .orElseThrow(() -> new MessagingException("Token inválido o expirado"));
+                    .orElseThrow(() -> new MessagingException("Token inválido"));
+
+            if (sesion.getUltimoAcceso().isBefore(LocalDateTime.now().minusDays(30))) {
+                sesionRepo.delete(sesion);
+                throw new MessagingException("Token expirado");
+            }
 
             UserPrincipal principal = new UserPrincipal(sesion.getUsuario().getId());
             accessor.setUser(principal);

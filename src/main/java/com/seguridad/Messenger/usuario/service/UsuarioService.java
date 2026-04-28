@@ -65,10 +65,10 @@ public class UsuarioService {
 
         PerfilUsuario perfil = usuario.getPerfil();
 
-        String avatarKeyViejo = null;
+        String urlAvatarVieja = null;
         if (avatar != null && !avatar.isEmpty()) {
-            avatarKeyViejo = perfil.getAvatarKey();
-            perfil.setAvatarKey(storageService.subirAvatar(avatar));
+            urlAvatarVieja = perfil.getUrlAvatar();
+            perfil.setUrlAvatar(storageService.subirAvatar(avatar));
         }
 
         if (bio != null) {
@@ -87,8 +87,8 @@ public class UsuarioService {
 
         usuarioRepository.save(usuario);
 
-        if (avatarKeyViejo != null) {
-            storageService.eliminar(avatarKeyViejo);
+        if (urlAvatarVieja != null) {
+            storageService.eliminarAvatar(urlAvatarVieja);
         }
 
         return construirPerfilResponse(usuario, true);
@@ -107,7 +107,7 @@ public class UsuarioService {
             ultimoVisto = perfil.getUltimoVisto();
         }
 
-        String urlAvatar = perfil.getAvatarKey() != null ? "/archivos/" + perfil.getAvatarKey() : null;
+        String urlAvatar = perfil.getUrlAvatar();
 
         return new PerfilResponse(
                 usuario.getId(),
