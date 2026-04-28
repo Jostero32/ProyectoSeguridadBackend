@@ -31,4 +31,11 @@ public interface UsuarioRepository extends JpaRepository<Usuario, UUID> {
               )
             """)
     Page<Usuario> buscar(@Param("q") String q, Pageable pageable);
+
+    /**
+     * Devuelve solo el username de un usuario — usado por el registro de presencia
+     * para construir el payload sin cargar la entidad completa.
+     */
+    @Query("SELECT u.username FROM Usuario u WHERE u.id = :id")
+    String findUsernameById(@Param("id") UUID id);
 }

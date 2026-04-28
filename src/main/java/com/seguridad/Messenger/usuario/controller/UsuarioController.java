@@ -2,7 +2,6 @@ package com.seguridad.Messenger.usuario.controller;
 
 import com.seguridad.Messenger.shared.exception.ErrorResponse;
 import com.seguridad.Messenger.shared.security.UserPrincipal;
-import com.seguridad.Messenger.usuario.dto.ActualizarPerfilRequest;
 import com.seguridad.Messenger.usuario.dto.PerfilResponse;
 import com.seguridad.Messenger.usuario.dto.RegistroRequest;
 import com.seguridad.Messenger.usuario.model.Usuario;
@@ -17,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,7 +26,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import org.springframework.data.domain.Page;
 import java.util.UUID;
@@ -62,7 +64,7 @@ public class UsuarioController {
         return ResponseEntity.ok(usuarioService.obtenerPerfilPropio(principal.usuarioId()));
     }
 
-    @PatchMapping("/me")
+    @PatchMapping(value = "/me", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Actualizar perfil del usuario autenticado")
     @SecurityRequirement(name = "BearerAuth")
     @ApiResponse(responseCode = "200", description = "Perfil actualizado")
@@ -70,9 +72,13 @@ public class UsuarioController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "No autenticado",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    public ResponseEntity<PerfilResponse> actualizarPerfil(@AuthenticationPrincipal UserPrincipal principal,
-                                                           @Valid @RequestBody ActualizarPerfilRequest request) {
-        return ResponseEntity.ok(usuarioService.actualizarPerfil(principal.usuarioId(), request));
+    public ResponseEntity<PerfilResponse> actualizarPerfil(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestPart(required = false) MultipartFile avatar,
+            @RequestPart(required = false) String bio,
+            @RequestPart(required = false) String privacidadUltimoVisto) {
+        return ResponseEntity.ok(usuarioService.actualizarPerfil(
+                principal.usuarioId(), avatar, bio, privacidadUltimoVisto));
     }
 
     @GetMapping("/{id}")

@@ -7,8 +7,10 @@ import jakarta.persistence.Converter;
 
 public enum PrivacidadUltimoVisto {
 
+    // Solo dos valores: TODOS o NADIE.
+    // CONTACTOS se eliminó porque la tabla Contacto no existe en el proyecto y
+    // no hay forma de evaluar si un usuario es contacto de otro.
     TODOS("todos"),
-    CONTACTOS("contactos"),
     NADIE("nadie");
 
     private final String valor;
