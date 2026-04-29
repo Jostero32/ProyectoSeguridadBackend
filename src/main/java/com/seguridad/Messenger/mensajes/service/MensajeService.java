@@ -3,6 +3,7 @@ package com.seguridad.Messenger.mensajes.service;
 import com.seguridad.Messenger.conversacion.repository.ConversacionRepository;
 import com.seguridad.Messenger.conversacion.repository.ParticipanteRepository;
 import com.seguridad.Messenger.mensajes.dto.*;
+import com.seguridad.Messenger.mensajes.mapper.MensajeMapper;
 import com.seguridad.Messenger.mensajes.model.ArchivoMultimedia;
 import com.seguridad.Messenger.mensajes.model.EstadoMensaje;
 import com.seguridad.Messenger.mensajes.model.EstadoMensajeId;
@@ -16,6 +17,7 @@ import com.seguridad.Messenger.mensajes.repository.ReaccionRepository;
 import com.seguridad.Messenger.shared.enums.TipoConversacion;
 import com.seguridad.Messenger.shared.enums.TipoMensaje;
 import com.seguridad.Messenger.shared.service.StorageService;
+import com.seguridad.Messenger.shared.service.ThumbnailService;
 import com.seguridad.Messenger.shared.exception.AccesoDenegadoException;
 import com.seguridad.Messenger.shared.exception.RecursoNoEncontradoException;
 import com.seguridad.Messenger.usuario.repository.BloqueoRepository;
@@ -49,7 +51,9 @@ public class MensajeService {
     private final ParticipanteRepository participanteRepository;
     private final BloqueoRepository bloqueoRepository;
     private final StorageService storageService;
+    private final ThumbnailService thumbnailService;
     private final ReaccionRepository reaccionRepository;
+    private final MensajeMapper mensajeMapper;
     private final ApplicationEventPublisher eventPublisher;
 
     // ─── Enviar ───────────────────────────────────────────────────────────────
@@ -109,6 +113,15 @@ public class MensajeService {
             am.setObjectKey(result.objectKey());
             am.setContentType(result.contentType());
             am.setTamanioBytes(result.tamanioBytes());
+
+            if (tipo == TipoMensaje.IMAGEN) {
+                try {
+                    am.setThumbnailBase64(thumbnailService.generarThumbnailBase64(archivo.getBytes()));
+                } catch (java.io.IOException e) {
+                    am.setThumbnailBase64(null);
+                }
+            }
+
             mensajeGuardado.setArchivo(am);
         }
 
@@ -145,7 +158,7 @@ public class MensajeService {
                 new EstadoEntregaEventPayload(mensajeFinal.getId(), conversacionId, receptorId, ahora, null)
         )));
 
-        MensajeResponse response = toResponse(mensajeFinal, usuarioId, conversacionId);
+        MensajeResponse response = mensajeMapper.toResponse(mensajeFinal);
         eventPublisher.publishEvent(new MensajeEnviadoEvent(response));
         return response;
     }
@@ -173,7 +186,7 @@ public class MensajeService {
         mensaje.setEditadoEn(LocalDateTime.now());
         mensaje = mensajeRepository.save(mensaje);
 
-        return toResponse(mensaje, usuarioId, conversacionId);
+        return mensajeMapper.toResponse(mensaje);
     }
 
     // ─── Eliminar ─────────────────────────────────────────────────────────────
@@ -227,7 +240,7 @@ public class MensajeService {
     public Page<MensajeResponse> historial(UUID conversacionId, UUID usuarioId, Pageable pageable) {
         verificarParticipante(conversacionId, usuarioId);
         return mensajeRepository.findByConversacion(conversacionId, pageable)
-                .map(m -> toResponse(m, usuarioId, conversacionId));
+            .map(mensajeMapper::toResponse);
     }
 
     // ─── Reaccionar (upsert) ──────────────────────────────────────────────────
@@ -335,80 +348,5 @@ public class MensajeService {
                 .toList();
     }
 
-    private MensajeResponse toResponse(Mensaje mensaje, UUID usuarioId, UUID conversacionId) {
-        // Visibilidad del contenido
-        String contenido;
-        if (mensaje.isEliminadoParaTodos()) {
-            contenido = null;
-        } else if (mensaje.getEliminadoEn() != null) {
-            contenido = mensaje.getRemitenteId().equals(usuarioId) ? null : mensaje.getContenido();
-        } else {
-            contenido = mensaje.getContenido();
-        }
-
-        boolean eliminado = mensaje.getEliminadoEn() != null;
-
-        // Mensaje al que responde
-        RepliedMessageResponse respuesta = null;
-        if (mensaje.getRespuestaMensaje() != null) {
-            Mensaje original = mensaje.getRespuestaMensaje();
-            respuesta = new RepliedMessageResponse(
-                    original.getId(),
-                    original.getRemitenteId(),
-                    original.isEliminadoParaTodos() ? null : original.getContenido(),
-                    original.getEliminadoEn() != null
-            );
-        }
-
-        // Estados de entrega/lectura: solo para el remitente
-        List<EstadoMensajeResponse> estados = null;
-        if (mensaje.getRemitenteId().equals(usuarioId)) {
-            estados = estadoMensajeRepository.findByIdMensajeId(mensaje.getId()).stream()
-                    .map(e -> new EstadoMensajeResponse(
-                            e.getId().getUsuarioId(),
-                            e.getEntregadoEn(),
-                            e.getLeidoEn()))
-                    .collect(Collectors.toList());
-        }
-
-        // Archivo multimedia
-        ArchivoMultimediaResponse archivoResp = null;
-        if (mensaje.getArchivo() != null && !mensaje.isEliminadoParaTodos()) {
-            ArchivoMultimedia am = mensaje.getArchivo();
-            archivoResp = new ArchivoMultimediaResponse(
-                    "/archivos/" + am.getObjectKey(),
-                    am.getNombreOriginal(),
-                    am.getContentType(),
-                    am.getTamanioBytes()
-            );
-        }
-
-        // Ubicación
-        UbicacionResponse ubicacionResp = null;
-        if (mensaje.getUbicacion() != null) {
-            UbicacionMensaje ub = mensaje.getUbicacion();
-            ubicacionResp = new UbicacionResponse(ub.getLatitud(), ub.getLongitud(), ub.getNombreLugar());
-        }
-
-        // Reacciones — agrupadas por emoji (batch-loaded por @BatchSize)
-        List<ResumenReaccionesResponse> resumenReacciones =
-                construirResumenReacciones(mensaje.getReacciones(), usuarioId);
-
-        return new MensajeResponse(
-                mensaje.getId(),
-                conversacionId,
-                mensaje.getRemitenteId(),
-                contenido,
-                mensaje.getTipo(),
-                mensaje.getCreadoEn(),
-                mensaje.getEditadoEn(),
-                eliminado,
-                mensaje.isEliminadoParaTodos(),
-                respuesta,
-                estados,
-                archivoResp,
-                ubicacionResp,
-                resumenReacciones
-        );
-    }
+    
 }

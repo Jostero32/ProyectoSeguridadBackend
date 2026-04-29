@@ -1,0 +1,1373 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Messenger Test Client</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+    :root {
+      --bg: #0f1419;
+      --bg-2: #111d2b;
+      --card: #161c24;
+      --card-2: #1b2430;
+      --ink: #e6edf3;
+      --muted: #93a4b8;
+      --accent: #36c2a7;
+      --accent-2: #f1b24a;
+      --danger: #ff6b6b;
+      --bubble-own: #1d3a4a;
+      --bubble-other: #1a2230;
+      --border: #2a3441;
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 800px at 20% -10%, rgba(54, 194, 167, 0.15), transparent 60%),
+        radial-gradient(1000px 700px at 110% 10%, rgba(241, 178, 74, 0.18), transparent 50%),
+        linear-gradient(180deg, var(--bg), var(--bg-2));
+      min-height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(15, 20, 25, 0.85);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0.6px;
+      font-weight: 700;
+    }
+
+    header .meta {
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    main {
+      padding: 24px;
+      display: grid;
+      gap: 24px;
+    }
+
+    .panel { display: block; }
+    .hidden { display: none !important; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--card), var(--card-2));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .card h2 {
+      margin: 0 0 14px 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input, button, select, textarea { font-family: inherit; }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0f1722;
+      color: var(--ink);
+      outline: none;
+      margin-bottom: 12px;
+    }
+
+    input[type="file"] {
+      padding: 8px;
+      cursor: pointer;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(54, 194, 167, 0.15);
+    }
+
+    button {
+      border: 0;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #081018;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    button.secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    button.danger {
+      background: var(--danger);
+      color: #1a0a0a;
+    }
+
+    .status {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 16px;
+    }
+
+    .status.error { color: var(--danger); }
+    .status.ok { color: var(--accent); }
+
+    .pill {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      background: rgba(54, 194, 167, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(54, 194, 167, 0.3);
+    }
+
+    .pill.warn {
+      background: rgba(241, 178, 74, 0.12);
+      color: var(--accent-2);
+      border-color: rgba(241, 178, 74, 0.3);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .row-tight {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #101721;
+      color: var(--ink);
+      width: 100%;
+    }
+
+    button.list-item { cursor: pointer; text-align: left; }
+
+    .list-item:hover {
+      border-color: rgba(54, 194, 167, 0.6);
+      box-shadow: 0 0 0 2px rgba(54, 194, 167, 0.1);
+    }
+
+    .list-title { font-weight: 600; font-size: 14px; }
+    .list-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    .btn-small {
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    .empty { font-size: 12px; color: var(--muted); }
+
+    /* ── Chat ─────────────────────────────────────────────── */
+
+    .chat-historial {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 420px;
+      overflow: auto;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #0f1722;
+      margin: 12px 0 14px;
+    }
+
+    .msg-row {
+      display: flex;
+      gap: 8px;
+      max-width: 80%;
+    }
+
+    .msg-row.own {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+
+    .bubble {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--bubble-other);
+      border: 1px solid rgba(54, 194, 167, 0.12);
+      font-size: 13px;
+      line-height: 1.45;
+      position: relative;
+      word-break: break-word;
+    }
+
+    .msg-row.own .bubble {
+      background: var(--bubble-own);
+      border-color: rgba(54, 194, 167, 0.3);
+    }
+
+    .bubble.deleted {
+      font-style: italic;
+      color: var(--muted);
+      background: #141921;
+      border-style: dashed;
+    }
+
+    .bubble-meta {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 4px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .bubble-actions {
+      display: flex;
+      gap: 4px;
+      flex-direction: column;
+      opacity: 0.4;
+      transition: opacity 0.15s;
+    }
+
+    .msg-row:hover .bubble-actions { opacity: 1; }
+
+    .icon-btn {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border-radius: 6px;
+      background: #101721;
+      border: 1px solid var(--border);
+      color: var(--ink);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .icon-btn:hover { border-color: var(--accent); }
+
+    .reply-context {
+      border-left: 3px solid var(--accent);
+      padding: 4px 8px;
+      margin-bottom: 6px;
+      background: rgba(54, 194, 167, 0.06);
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .reply-author { font-weight: 600; color: var(--accent); }
+
+    .multimedia-img {
+      max-width: 240px;
+      max-height: 240px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: block;
+    }
+
+    .multimedia-file {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: #0f1722;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .multimedia-file .name { font-weight: 600; }
+    .multimedia-file .size { color: var(--muted); }
+
+    .ubicacion-card {
+      padding: 8px 10px;
+      background: #0f1722;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .reactions {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+
+    .reaction-chip {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #0f1722;
+      border: 1px solid var(--border);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .reaction-chip.mine {
+      background: rgba(54, 194, 167, 0.18);
+      border-color: var(--accent);
+    }
+
+    /* ── Input area ─────────────────────────────────────────── */
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab {
+      padding: 8px 14px;
+      cursor: pointer;
+      background: transparent;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 0;
+    }
+
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .reply-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: rgba(54, 194, 167, 0.08);
+      border: 1px solid rgba(54, 194, 167, 0.3);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+
+    .reply-pill button {
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--ink);
+      padding: 4px 8px;
+    }
+
+    .emoji-picker {
+      display: flex;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    .emoji-picker button {
+      background: #0f1722;
+      border: 1px solid var(--border);
+      color: var(--ink);
+      padding: 4px 8px;
+      font-size: 16px;
+    }
+
+    .emoji-picker button:hover { border-color: var(--accent); }
+
+    @media (max-width: 680px) {
+      .row { grid-template-columns: 1fr; }
+      header { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .msg-row { max-width: 95%; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Messenger Test Client</h1>
+      <div class="meta">REST + WebSocket QA</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button id="btn-back" class="secondary hidden" type="button">← Chats</button>
+      <button id="btn-logout" class="secondary" type="button">Cerrar Sesión</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ── AUTH ────────────────────────────────────────────── -->
+    <section id="section-auth" class="panel">
+      <div class="grid">
+        <div class="card">
+          <h2>Login</h2>
+          <form id="form-login">
+            <label for="login-email">Email</label>
+            <input id="login-email" type="email" required />
+
+            <label for="login-password">Password</label>
+            <input id="login-password" type="password" required />
+
+            <button type="submit">Entrar</button>
+            <div id="login-status" class="status"></div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2>Registro</h2>
+          <form id="form-register">
+            <div class="row">
+              <div>
+                <label for="reg-nombres">Nombres</label>
+                <input id="reg-nombres" type="text" required />
+              </div>
+              <div>
+                <label for="reg-apellidos">Apellidos</label>
+                <input id="reg-apellidos" type="text" required />
+              </div>
+            </div>
+
+            <label for="reg-fecha">Fecha nacimiento</label>
+            <input id="reg-fecha" type="date" required />
+
+            <label for="reg-username">Username</label>
+            <input id="reg-username" type="text" required />
+
+            <label for="reg-email">Email</label>
+            <input id="reg-email" type="email" required />
+
+            <label for="reg-password">Password</label>
+            <input id="reg-password" type="password" required />
+
+            <button type="submit">Crear cuenta</button>
+            <div id="register-status" class="status"></div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── DASHBOARD ───────────────────────────────────────── -->
+    <section id="section-dashboard" class="panel hidden">
+      <div class="card">
+        <h2>Dashboard</h2>
+        <p>Sesión activa. Gestiona chats y crea conversaciones nuevas.</p>
+        <div id="session-pill" class="pill">No token</div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Chats</h2>
+          <div id="chats-status" class="status"></div>
+          <div id="chats-list" class="list"></div>
+        </div>
+
+        <div class="card">
+          <h2>Buscar usuarios</h2>
+          <div class="row-tight">
+            <div>
+              <label for="search-input">Texto de búsqueda</label>
+              <input id="search-input" type="text" placeholder="username, nombres..." />
+            </div>
+            <button id="btn-search" class="btn-small" type="button">Buscar</button>
+          </div>
+          <div id="search-status" class="status"></div>
+          <div id="search-results" class="list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CHAT ────────────────────────────────────────────── -->
+    <section id="section-chat" class="panel hidden">
+      <div class="card">
+        <h2 id="chat-active-title">Chat</h2>
+        <div id="chat-active" class="pill">Chat activo: -</div>
+
+        <div id="chat-historial" class="chat-historial"></div>
+
+        <div id="reply-pill" class="reply-pill hidden">
+          <span>Respondiendo a <strong id="reply-pill-author"></strong>: <span id="reply-pill-preview"></span></span>
+          <button id="btn-cancel-reply" type="button">Cancelar</button>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+          <button class="tab active" data-tab="texto" type="button">📝 Texto</button>
+          <button class="tab" data-tab="archivo" type="button">📎 Archivo</button>
+          <button class="tab" data-tab="ubicacion" type="button">📍 Ubicación</button>
+        </div>
+
+        <!-- Tab: Texto -->
+        <form id="form-texto" class="tab-content row-tight">
+          <div>
+            <label for="chat-input">Mensaje</label>
+            <input id="chat-input" type="text" placeholder="Escribe un mensaje" />
+          </div>
+          <button id="btn-send" class="btn-small" type="submit">Enviar</button>
+        </form>
+
+        <!-- Tab: Archivo -->
+        <form id="form-archivo" class="tab-content hidden">
+          <div class="row">
+            <div>
+              <label for="archivo-tipo">Tipo</label>
+              <select id="archivo-tipo">
+                <option value="IMAGEN">IMAGEN</option>
+                <option value="AUDIO">AUDIO</option>
+                <option value="VIDEO">VIDEO</option>
+                <option value="DOCUMENTO">DOCUMENTO</option>
+                <option value="STICKER">STICKER (webp)</option>
+                <option value="GIF">GIF</option>
+              </select>
+            </div>
+            <div>
+              <label for="archivo-file">Archivo</label>
+              <input id="archivo-file" type="file" />
+            </div>
+          </div>
+          <button class="btn-small" type="submit">Enviar archivo</button>
+        </form>
+
+        <!-- Tab: Ubicación -->
+        <form id="form-ubicacion" class="tab-content hidden">
+          <div class="row">
+            <div>
+              <label for="ubic-lat">Latitud</label>
+              <input id="ubic-lat" type="text" placeholder="40.4168" />
+            </div>
+            <div>
+              <label for="ubic-lon">Longitud</label>
+              <input id="ubic-lon" type="text" placeholder="-3.7038" />
+            </div>
+          </div>
+          <label for="ubic-nombre">Nombre del lugar (opcional)</label>
+          <input id="ubic-nombre" type="text" placeholder="Madrid, España" />
+          <div style="display:flex; gap:8px;">
+            <button class="btn-small secondary" type="button" id="btn-geo">Usar mi ubicación</button>
+            <button class="btn-small" type="submit">Enviar ubicación</button>
+          </div>
+        </form>
+
+        <div id="chat-status" class="status"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.6.8/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+  <script>
+    const API_BASE = "http://localhost:8080";
+    const TOKEN_KEY = "messenger_token";
+    const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+
+    axios.defaults.baseURL = API_BASE;
+
+    // ── DOM refs ─────────────────────────────────────────────
+    const $ = (id) => document.getElementById(id);
+    const sectionAuth = $("section-auth");
+    const sectionDashboard = $("section-dashboard");
+    const sectionChat = $("section-chat");
+    const btnLogout = $("btn-logout");
+    const btnBack = $("btn-back");
+    const sessionPill = $("session-pill");
+    const chatsList = $("chats-list");
+    const chatsStatus = $("chats-status");
+    const searchInput = $("search-input");
+    const btnSearch = $("btn-search");
+    const searchStatus = $("search-status");
+    const searchResults = $("search-results");
+    const chatActive = $("chat-active");
+    const chatActiveTitle = $("chat-active-title");
+    const chatHistorial = $("chat-historial");
+    const chatInput = $("chat-input");
+    const chatStatus = $("chat-status");
+    const replyPill = $("reply-pill");
+    const replyPillAuthor = $("reply-pill-author");
+    const replyPillPreview = $("reply-pill-preview");
+    const loginForm = $("form-login");
+    const loginStatus = $("login-status");
+    const registerForm = $("form-register");
+    const registerStatus = $("register-status");
+    const formTexto = $("form-texto");
+    const formArchivo = $("form-archivo");
+    const formUbicacion = $("form-ubicacion");
+
+    // ── State ────────────────────────────────────────────────
+    let chatActivoId = null;
+    let chatActivoTitulo = null;
+    let stompClient = null;
+    let usuarioActualId = null;
+    let replyTo = null; // { id, author, preview }
+    const mensajesEnPantalla = new Map(); // id → MensajeResponse
+
+    // ── Utils ────────────────────────────────────────────────
+    function setStatus(el, msg, type) {
+      el.textContent = msg || "";
+      el.classList.remove("ok", "error");
+      if (type) el.classList.add(type);
+    }
+
+    function showSection(section) {
+      [sectionAuth, sectionDashboard, sectionChat].forEach(s => s.classList.add("hidden"));
+      section.classList.remove("hidden");
+      btnBack.classList.toggle("hidden", section !== sectionChat);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
+    function fmtSize(bytes) {
+      if (!bytes) return "";
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    }
+
+    function fmtTime(iso) {
+      if (!iso) return "";
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString();
+      } catch { return iso; }
+    }
+
+    function applyToken(token) {
+      if (token) {
+        axios.defaults.headers.common["Authorization"] = "Bearer " + token;
+        sessionPill.textContent = "Token cargado";
+        try {
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          usuarioActualId = payload.sub || payload.usuarioId || payload.id;
+        } catch { usuarioActualId = null; }
+      } else {
+        delete axios.defaults.headers.common["Authorization"];
+        sessionPill.textContent = "No token";
+        usuarioActualId = null;
+      }
+    }
+
+    function saveToken(token) {
+      localStorage.setItem(TOKEN_KEY, token);
+      applyToken(token);
+    }
+
+    function clearToken() {
+      localStorage.removeItem(TOKEN_KEY);
+      applyToken(null);
+    }
+
+    // ── Render mensajes ──────────────────────────────────────
+
+    function previewMensaje(m) {
+      if (!m) return "";
+      if (m.eliminadoParaTodos) return "[mensaje eliminado]";
+      if (!m.payload) return "[" + (m.tipo || "?") + "]";
+      switch (m.tipo) {
+        case "TEXTO": return m.payload.contenido || "";
+        case "UBICACION":
+          const u = m.payload.ubicacion;
+          return u ? "📍 " + (u.nombreLugar || `${u.latitud}, ${u.longitud}`) : "[ubicación]";
+        case "IMAGEN": return "🖼 Imagen";
+        case "AUDIO": return "🎵 Audio";
+        case "VIDEO": return "🎬 Video";
+        case "DOCUMENTO": return "📄 " + (m.payload.archivo?.nombreOriginal || "Documento");
+        case "STICKER": return "🟣 Sticker";
+        case "GIF": return "🎞 GIF";
+        default: return "[" + m.tipo + "]";
+      }
+    }
+
+    function renderPayload(m) {
+      if (m.eliminadoParaTodos) return `<em>Mensaje eliminado para todos</em>`;
+      if (!m.payload) return `<em>[${escapeHtml(m.tipo)}]</em>`;
+
+      switch (m.tipo) {
+        case "TEXTO":
+          return escapeHtml(m.payload.contenido || "");
+
+        case "UBICACION": {
+          const u = m.payload.ubicacion || {};
+          const link = `https://www.google.com/maps?q=${u.latitud},${u.longitud}`;
+          return `<div class="ubicacion-card">
+            📍 <strong>${escapeHtml(u.nombreLugar || "Ubicación")}</strong><br>
+            <span class="list-sub">${escapeHtml(u.latitud)}, ${escapeHtml(u.longitud)}</span><br>
+            <a href="${link}" target="_blank" rel="noopener" style="color:var(--accent)">Abrir en Maps</a>
+          </div>`;
+        }
+
+        case "IMAGEN":
+        case "STICKER":
+        case "GIF": {
+          const a = m.payload.archivo || {};
+          const src = a.thumbnailBase64
+            ? `data:image/jpeg;base64,${a.thumbnailBase64}`
+            : null;
+          if (src) {
+            return `<img class="multimedia-img" src="${src}" data-key="${escapeHtml(a.urlAcceso || "")}" alt="${escapeHtml(a.nombreOriginal || "")}" />`;
+          }
+          // sin thumbnail (debería ser solo si fallo): placeholder con boton
+          return `<button class="btn-small open-file" data-key="${escapeHtml(a.urlAcceso || "")}">🖼 Abrir ${escapeHtml(a.nombreOriginal || "imagen")}</button>`;
+        }
+
+        case "AUDIO":
+        case "VIDEO":
+        case "DOCUMENTO": {
+          const a = m.payload.archivo || {};
+          const icon = m.tipo === "AUDIO" ? "🎵" : m.tipo === "VIDEO" ? "🎬" : "📄";
+          return `<div class="multimedia-file">
+            <span>${icon}</span>
+            <div>
+              <div class="name">${escapeHtml(a.nombreOriginal || m.tipo)}</div>
+              <div class="size">${escapeHtml(a.contentType || "")} · ${fmtSize(a.tamanioBytes)}</div>
+            </div>
+            <button class="btn-small open-file" data-key="${escapeHtml(a.urlAcceso || "")}" type="button">Abrir</button>
+          </div>`;
+        }
+
+        default:
+          return `<em>[${escapeHtml(m.tipo)}]</em>`;
+      }
+    }
+
+    function renderReplyContext(respuesta) {
+      if (!respuesta) return "";
+      const txt = respuesta.eliminado
+        ? "(mensaje eliminado)"
+        : (respuesta.contenido || "[contenido]");
+      return `<div class="reply-context">
+        <div class="reply-author">↩ Respuesta</div>
+        <div>${escapeHtml(txt.slice(0, 100))}</div>
+      </div>`;
+    }
+
+    function renderReactions(m) {
+      if (!Array.isArray(m.reacciones) || m.reacciones.length === 0) return "";
+      return `<div class="reactions">
+        ${m.reacciones.map(r => `
+          <span class="reaction-chip ${r.miReaccion ? "mine" : ""}" data-emoji="${escapeHtml(r.emoji)}" data-msg="${m.id}">
+            ${escapeHtml(r.emoji)} ${r.cantidad}
+          </span>
+        `).join("")}
+      </div>`;
+    }
+
+    function renderMensaje(m) {
+      mensajesEnPantalla.set(m.id, m);
+
+      const own = m.remitenteId === usuarioActualId;
+      const row = document.createElement("div");
+      row.className = "msg-row" + (own ? " own" : "");
+      row.dataset.msgId = m.id;
+
+      const editado = m.editadoEn ? " · editado" : "";
+      const eliminado = m.eliminadoParaTodos || m.eliminado;
+
+      row.innerHTML = `
+        <div class="bubble ${eliminado ? "deleted" : ""}">
+          ${renderReplyContext(m.respuestaMensaje)}
+          <div class="payload">${renderPayload(m)}</div>
+          <div class="bubble-meta">
+            <span>${fmtTime(m.creadoEn)}${editado}</span>
+          </div>
+          ${eliminado ? "" : renderReactions(m)}
+        </div>
+        ${eliminado ? "" : `
+          <div class="bubble-actions">
+            <button class="icon-btn" data-action="reply" title="Responder">↩</button>
+            <button class="icon-btn" data-action="react" title="Reaccionar">😊</button>
+            ${own && m.tipo === "TEXTO" ? `<button class="icon-btn" data-action="edit" title="Editar">✏</button>` : ""}
+            ${own ? `<button class="icon-btn" data-action="del-todos" title="Eliminar para todos">🗑</button>` : ""}
+            <button class="icon-btn" data-action="del-mi" title="Eliminar para mí">×</button>
+          </div>
+        `}
+      `;
+
+      return row;
+    }
+
+    function renderHistorial(mensajes) {
+      chatHistorial.innerHTML = "";
+      mensajesEnPantalla.clear();
+      if (!mensajes || mensajes.length === 0) {
+        chatHistorial.innerHTML = `<div class="empty">Sin mensajes en este chat.</div>`;
+        return;
+      }
+      mensajes.forEach(m => chatHistorial.appendChild(renderMensaje(m)));
+      chatHistorial.scrollTop = chatHistorial.scrollHeight;
+    }
+
+    function appendNuevo(m) {
+      if (mensajesEnPantalla.has(m.id)) return;
+      const empty = chatHistorial.querySelector(".empty");
+      if (empty) empty.remove();
+      chatHistorial.appendChild(renderMensaje(m));
+      chatHistorial.scrollTop = chatHistorial.scrollHeight;
+    }
+
+    function reemplazarMensaje(m) {
+      const row = chatHistorial.querySelector(`[data-msg-id="${m.id}"]`);
+      if (!row) {
+        appendNuevo(m);
+        return;
+      }
+      row.replaceWith(renderMensaje(m));
+    }
+
+    // ── Acciones por mensaje ─────────────────────────────────
+
+    chatHistorial.addEventListener("click", async (ev) => {
+      const target = ev.target;
+
+      // Abrir archivo (presigned URL)
+      const openBtn = target.closest(".open-file") || (target.classList?.contains("multimedia-img") ? target : null);
+      if (openBtn) {
+        const key = openBtn.dataset.key;
+        if (!key) return;
+        await abrirArchivo(key);
+        return;
+      }
+
+      // Reaccion chip → toggle
+      const chip = target.closest(".reaction-chip");
+      if (chip) {
+        await toggleReaccion(chip.dataset.msg, chip.dataset.emoji);
+        return;
+      }
+
+      // Bubble actions
+      const actionBtn = target.closest("[data-action]");
+      if (!actionBtn) return;
+      const row = actionBtn.closest(".msg-row");
+      if (!row) return;
+      const msgId = row.dataset.msgId;
+      const m = mensajesEnPantalla.get(msgId);
+      if (!m) return;
+
+      const action = actionBtn.dataset.action;
+      if (action === "reply") setReply(m);
+      else if (action === "edit") await editarMensaje(m);
+      else if (action === "del-mi") await eliminarMensaje(m, "para_mi");
+      else if (action === "del-todos") await eliminarMensaje(m, "para_todos");
+      else if (action === "react") mostrarEmojiPicker(actionBtn, msgId);
+    });
+
+    async function abrirArchivo(urlAcceso) {
+      // urlAcceso = "/archivos/imagen/xxx.jpg"
+      try {
+        setStatus(chatStatus, "Solicitando URL...", null);
+        const res = await axios.get(urlAcceso);
+        const url = res.data?.url;
+        if (!url) throw new Error("Sin URL en la respuesta");
+        window.open(url, "_blank", "noopener");
+        setStatus(chatStatus, "", null);
+      } catch (err) {
+        setStatus(chatStatus, err.response?.data?.mensaje || err.message || "Error abriendo archivo", "error");
+      }
+    }
+
+    function setReply(m) {
+      replyTo = {
+        id: m.id,
+        author: m.remitenteId === usuarioActualId ? "ti" : (m.remitenteId || "").slice(0, 8),
+        preview: previewMensaje(m).slice(0, 80)
+      };
+      replyPillAuthor.textContent = replyTo.author;
+      replyPillPreview.textContent = replyTo.preview;
+      replyPill.classList.remove("hidden");
+      chatInput.focus();
+    }
+
+    $("btn-cancel-reply").addEventListener("click", () => {
+      replyTo = null;
+      replyPill.classList.add("hidden");
+    });
+
+    async function editarMensaje(m) {
+      const nuevo = prompt("Nuevo contenido:", m.payload?.contenido || "");
+      if (nuevo == null || !nuevo.trim()) return;
+      try {
+        const res = await axios.patch(`/chats/${chatActivoId}/mensajes/${m.id}`, { contenido: nuevo.trim() });
+        reemplazarMensaje(res.data);
+        setStatus(chatStatus, "Mensaje editado.", "ok");
+      } catch (err) {
+        setStatus(chatStatus, err.response?.data?.mensaje || err.message, "error");
+      }
+    }
+
+    async function eliminarMensaje(m, tipo) {
+      const txt = tipo === "para_todos" ? "¿Eliminar para todos?" : "¿Eliminar para mí?";
+      if (!confirm(txt)) return;
+      try {
+        await axios.delete(`/chats/${chatActivoId}/mensajes/${m.id}`, { params: { tipo } });
+        if (tipo === "para_todos") {
+          // El servidor marca eliminadoParaTodos=true. Recargar para reflejar.
+          await cargarMensajes();
+        } else {
+          // Solo para mí → quitar de la vista local
+          const row = chatHistorial.querySelector(`[data-msg-id="${m.id}"]`);
+          if (row) row.remove();
+        }
+        setStatus(chatStatus, "Eliminado.", "ok");
+      } catch (err) {
+        setStatus(chatStatus, err.response?.data?.mensaje || err.message, "error");
+      }
+    }
+
+    function mostrarEmojiPicker(anchor, msgId) {
+      // Quitar pickers previos
+      document.querySelectorAll(".emoji-picker.popup").forEach(e => e.remove());
+      const picker = document.createElement("div");
+      picker.className = "emoji-picker popup";
+      picker.style.position = "absolute";
+      picker.innerHTML = REACTIONS.map(e => `<button type="button" data-emoji="${e}">${e}</button>`).join("");
+      picker.addEventListener("click", async (ev) => {
+        const b = ev.target.closest("button");
+        if (!b) return;
+        await reaccionar(msgId, b.dataset.emoji);
+        picker.remove();
+      });
+      anchor.parentElement.appendChild(picker);
+      // Cerrar al hacer click fuera
+      setTimeout(() => {
+        document.addEventListener("click", function onDoc(ev) {
+          if (!picker.contains(ev.target) && ev.target !== anchor) {
+            picker.remove();
+            document.removeEventListener("click", onDoc);
+          }
+        });
+      }, 0);
+    }
+
+    async function reaccionar(msgId, emoji) {
+      try {
+        await axios.put(`/chats/${chatActivoId}/mensajes/${msgId}/reaccion`, { emoji });
+      } catch (err) {
+        setStatus(chatStatus, err.response?.data?.mensaje || err.message, "error");
+      }
+    }
+
+    async function toggleReaccion(msgId, emoji) {
+      const m = mensajesEnPantalla.get(msgId);
+      const yaMia = m?.reacciones?.some(r => r.emoji === emoji && r.miReaccion);
+      try {
+        if (yaMia) {
+          await axios.delete(`/chats/${chatActivoId}/mensajes/${msgId}/reaccion`);
+        } else {
+          await axios.put(`/chats/${chatActivoId}/mensajes/${msgId}/reaccion`, { emoji });
+        }
+      } catch (err) {
+        setStatus(chatStatus, err.response?.data?.mensaje || err.message, "error");
+      }
+    }
+
+    // ── Cargar historial ─────────────────────────────────────
+
+    async function cargarMensajes() {
+      if (!chatActivoId) return;
+      setStatus(chatStatus, "Cargando mensajes...", null);
+      try {
+        const res = await axios.get(`/chats/${chatActivoId}/mensajes`, { params: { page: 0, size: 50 } });
+        const data = res.data;
+        const mensajes = data?.content ?? data;
+        const ordenados = Array.isArray(mensajes) ? mensajes.slice().reverse() : [];
+        renderHistorial(ordenados);
+        setStatus(chatStatus, "", null);
+      } catch (err) {
+        setStatus(chatStatus, err.response?.data?.mensaje || err.message || "Error cargando mensajes", "error");
+      }
+    }
+
+    // ── WebSocket ────────────────────────────────────────────
+
+    function conectarWebSocket() {
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (!token) return;
+      if (stompClient && stompClient.active) return;
+
+      stompClient = new StompJs.Client({
+        brokerURL: "ws://localhost:8080/ws",
+        reconnectDelay: 5000,
+        connectHeaders: { Authorization: "Bearer " + token },
+        onConnect: () => {
+          stompClient.subscribe("/user/queue/eventos", (message) => {
+            try {
+              const evento = JSON.parse(message.body);
+              manejarEventoWS(evento);
+            } catch { /* ignore */ }
+          });
+        }
+      });
+
+      stompClient.activate();
+    }
+
+    function manejarEventoWS(evento) {
+      const tipo = evento.tipo;
+      const payload = evento.payload;
+      if (!payload) return;
+
+      // Filtrar al chat activo
+      if (payload.conversacionId && payload.conversacionId !== chatActivoId) {
+        return;
+      }
+
+      if (tipo === "NUEVO_MENSAJE") {
+        appendNuevo(payload);
+      } else if (tipo === "MENSAJE_EDITADO") {
+        reemplazarMensaje(payload);
+      } else if (tipo === "MENSAJE_ELIMINADO") {
+        if (payload.id || payload.mensajeId) {
+          const id = payload.id || payload.mensajeId;
+          const m = mensajesEnPantalla.get(id);
+          if (m) {
+            m.eliminadoParaTodos = true;
+            reemplazarMensaje(m);
+          }
+        }
+      } else if (tipo === "NUEVA_REACCION" || tipo === "REACCION_ELIMINADA") {
+        const id = payload.mensajeId;
+        const m = mensajesEnPantalla.get(id);
+        if (m) {
+          m.reacciones = payload.resumen || [];
+          reemplazarMensaje(m);
+        }
+      }
+    }
+
+    // ── Envío ────────────────────────────────────────────────
+
+    function buildBaseFormData(tipo) {
+      const fd = new FormData();
+      fd.append("tipo", tipo);
+      if (replyTo) fd.append("respuestaMensajeId", replyTo.id);
+      return fd;
+    }
+
+    function clearReplyAndStatus() {
+      replyTo = null;
+      replyPill.classList.add("hidden");
+      setStatus(chatStatus, "", null);
+    }
+
+    formTexto.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (!chatActivoId) return setStatus(chatStatus, "Selecciona un chat.", "error");
+      const contenido = chatInput.value.trim();
+      if (!contenido) return;
+
+      const fd = buildBaseFormData("TEXTO");
+      fd.append("contenido", contenido);
+
+      try {
+        await axios.post(`/chats/${chatActivoId}/mensajes`, fd);
+        chatInput.value = "";
+        clearReplyAndStatus();
+      } catch (err) {
+        setStatus(chatStatus, err.response?.data?.mensaje || err.message, "error");
+      }
+    });
+
+    formArchivo.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (!chatActivoId) return setStatus(chatStatus, "Selecciona un chat.", "error");
+      const tipo = $("archivo-tipo").value;
+      const file = $("archivo-file").files[0];
+      if (!file) return setStatus(chatStatus, "Selecciona un archivo.", "error");
+
+      const fd = buildBaseFormData(tipo);
+      fd.append("archivo", file);
+
+      try {
+        setStatus(chatStatus, "Subiendo archivo...", null);
+        await axios.post(`/chats/${chatActivoId}/mensajes`, fd);
+        $("archivo-file").value = "";
+        clearReplyAndStatus();
+      } catch (err) {
+        setStatus(chatStatus, err.response?.data?.mensaje || err.message, "error");
+      }
+    });
+
+    formUbicacion.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (!chatActivoId) return setStatus(chatStatus, "Selecciona un chat.", "error");
+      const lat = $("ubic-lat").value.trim();
+      const lon = $("ubic-lon").value.trim();
+      const nombre = $("ubic-nombre").value.trim();
+      if (!lat || !lon) return setStatus(chatStatus, "Latitud y longitud son obligatorias.", "error");
+
+      const fd = buildBaseFormData("UBICACION");
+      fd.append("latitud", lat);
+      fd.append("longitud", lon);
+      if (nombre) fd.append("nombreLugar", nombre);
+
+      try {
+        await axios.post(`/chats/${chatActivoId}/mensajes`, fd);
+        $("ubic-lat").value = "";
+        $("ubic-lon").value = "";
+        $("ubic-nombre").value = "";
+        clearReplyAndStatus();
+      } catch (err) {
+        setStatus(chatStatus, err.response?.data?.mensaje || err.message, "error");
+      }
+    });
+
+    $("btn-geo").addEventListener("click", () => {
+      if (!navigator.geolocation) return setStatus(chatStatus, "Geolocalización no disponible.", "error");
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          $("ubic-lat").value = pos.coords.latitude.toFixed(6);
+          $("ubic-lon").value = pos.coords.longitude.toFixed(6);
+        },
+        (err) => setStatus(chatStatus, "Geo: " + err.message, "error")
+      );
+    });
+
+    // ── Tabs ─────────────────────────────────────────────────
+
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const target = tab.dataset.tab;
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.add("hidden"));
+        if (target === "texto") formTexto.classList.remove("hidden");
+        else if (target === "archivo") formArchivo.classList.remove("hidden");
+        else if (target === "ubicacion") formUbicacion.classList.remove("hidden");
+      });
+    });
+
+    // ── Chats list ───────────────────────────────────────────
+
+    function renderChats(chats) {
+      chatsList.innerHTML = "";
+      if (!Array.isArray(chats) || chats.length === 0) {
+        chatsList.innerHTML = `<div class="empty">Sin conversaciones todavía.</div>`;
+        return;
+      }
+      chats.forEach((chat) => {
+        const titulo = chat.titulo || "Chat sin título";
+        const preview = chat.ultimoMensaje?.preview || "Sin mensajes";
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "list-item";
+        item.innerHTML = `
+          <div>
+            <div class="list-title">${escapeHtml(titulo)}</div>
+            <div class="list-sub">${escapeHtml(preview)}</div>
+          </div>
+          <div class="pill">${escapeHtml(chat.tipo || "CHAT")}</div>
+        `;
+        item.addEventListener("click", () => openChat(chat.id, titulo));
+        chatsList.appendChild(item);
+      });
+    }
+
+    async function cargarChats() {
+      setStatus(chatsStatus, "Cargando chats...", null);
+      try {
+        const res = await axios.get("/chats");
+        const data = res.data;
+        const chats = Array.isArray(data) ? data : (data?.content ?? []);
+        renderChats(chats);
+        setStatus(chatsStatus, "", null);
+      } catch (err) {
+        setStatus(chatsStatus, err.response?.data?.mensaje || err.message, "error");
+      }
+    }
+
+    function openChat(chatId, titulo) {
+      chatActivoId = chatId;
+      chatActivoTitulo = titulo;
+      chatActive.textContent = "Chat activo: " + (titulo || chatId || "-");
+      chatActiveTitle.textContent = titulo || "Chat";
+      replyTo = null;
+      replyPill.classList.add("hidden");
+      showSection(sectionChat);
+      conectarWebSocket();
+      cargarMensajes();
+    }
+
+    btnBack.addEventListener("click", () => {
+      chatActivoId = null;
+      chatActivoTitulo = null;
+      showSection(sectionDashboard);
+      cargarChats();
+    });
+
+    // ── Búsqueda usuarios ────────────────────────────────────
+
+    function renderSearchResults(usuarios) {
+      searchResults.innerHTML = "";
+      if (!Array.isArray(usuarios) || usuarios.length === 0) {
+        searchResults.innerHTML = `<div class="empty">Sin resultados.</div>`;
+        return;
+      }
+      usuarios.forEach((usuario) => {
+        const nombre = [usuario.nombres, usuario.apellidos].filter(Boolean).join(" ");
+        const item = document.createElement("div");
+        item.className = "list-item";
+        item.innerHTML = `
+          <div>
+            <div class="list-title">${escapeHtml(usuario.username || "Usuario")}</div>
+            <div class="list-sub">${escapeHtml(nombre)}</div>
+          </div>
+          <button class="btn-small" type="button">Chatear</button>
+        `;
+        item.querySelector("button").addEventListener("click", async (ev) => {
+          ev.stopPropagation();
+          try {
+            await axios.post("/chats/individual", { destinatarioId: usuario.id });
+            setStatus(searchStatus, "Chat creado o existente.", "ok");
+            await cargarChats();
+          } catch (err) {
+            setStatus(searchStatus, err.response?.data?.mensaje || err.message, "error");
+          }
+        });
+        searchResults.appendChild(item);
+      });
+    }
+
+    async function buscarUsuarios() {
+      const q = searchInput.value.trim();
+      setStatus(searchStatus, "", null);
+      if (!q) return setStatus(searchStatus, "Escribe un texto para buscar.", "error");
+      try {
+        const res = await axios.get("/usuarios/buscar", { params: { q } });
+        const usuarios = res.data?.content ?? res.data;
+        renderSearchResults(Array.isArray(usuarios) ? usuarios : []);
+      } catch (err) {
+        setStatus(searchStatus, err.response?.data?.mensaje || err.message, "error");
+      }
+    }
+
+    // ── Auth ─────────────────────────────────────────────────
+
+    async function handleLogin(event) {
+      event.preventDefault();
+      setStatus(loginStatus, "", null);
+      const email = $("login-email").value.trim();
+      const password = $("login-password").value;
+      try {
+        const res = await axios.post("/auth/login", { email, password });
+        const token = res.data?.token;
+        if (!token) throw new Error("Token missing");
+        saveToken(token);
+        setStatus(loginStatus, "Login OK", "ok");
+        showSection(sectionDashboard);
+        await cargarChats();
+      } catch (err) {
+        setStatus(loginStatus, err.response?.data?.mensaje || err.message || "Login error", "error");
+      }
+    }
+
+    async function handleRegister(event) {
+      event.preventDefault();
+      setStatus(registerStatus, "", null);
+      const payload = {
+        nombres: $("reg-nombres").value.trim(),
+        apellidos: $("reg-apellidos").value.trim(),
+        fechaNacimiento: $("reg-fecha").value,
+        username: $("reg-username").value.trim(),
+        email: $("reg-email").value.trim(),
+        password: $("reg-password").value
+      };
+      try {
+        await axios.post("/usuarios/registro", payload);
+        setStatus(registerStatus, "Registro OK. Ahora haz login.", "ok");
+      } catch (err) {
+        setStatus(registerStatus, err.response?.data?.mensaje || err.message, "error");
+      }
+    }
+
+    async function handleLogout() {
+      const token = localStorage.getItem(TOKEN_KEY);
+      try {
+        if (token) await axios.post("/auth/logout");
+      } catch { /* ignore */ }
+      finally {
+        if (stompClient) {
+          stompClient.deactivate();
+          stompClient = null;
+        }
+        clearToken();
+        chatActivoId = null;
+        showSection(sectionAuth);
+      }
+    }
+
+    // ── Wire ─────────────────────────────────────────────────
+
+    loginForm.addEventListener("submit", handleLogin);
+    registerForm.addEventListener("submit", handleRegister);
+    btnLogout.addEventListener("click", handleLogout);
+    btnSearch.addEventListener("click", buscarUsuarios);
+    searchInput.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); buscarUsuarios(); } });
+
+    // ── Init ─────────────────────────────────────────────────
+
+    const savedToken = localStorage.getItem(TOKEN_KEY);
+    if (savedToken) {
+      applyToken(savedToken);
+      showSection(sectionDashboard);
+      conectarWebSocket();
+      cargarChats();
+    } else {
+      showSection(sectionAuth);
+    }
+  </script>
+</body>
+</html>

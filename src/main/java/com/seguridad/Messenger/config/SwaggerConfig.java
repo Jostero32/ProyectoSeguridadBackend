@@ -25,7 +25,7 @@ public class SwaggerConfig {
             `WebSocketEvent { tipo, payload }`.
 
             ### Tipos de eventos recibidos
-            - `NUEVO_MENSAJE`      → `MensajeResponse` completo (incluye `conversacionId`)
+            - `NUEVO_MENSAJE`      → `MensajeResponse` (envelope con `payload`, incluye `conversacionId`)
             - `NUEVA_REACCION`     → `{ mensajeId, conversacionId, usuarioId, emoji, resumenActualizado }`
             - `REACCION_ELIMINADA` → `{ mensajeId, conversacionId, usuarioId, emoji: null, resumenActualizado }`
             - `ESTADO_ENTREGA`     → `{ mensajeId, conversacionId, usuarioId, entregadoEn, leidoEn }` (solo al remitente)

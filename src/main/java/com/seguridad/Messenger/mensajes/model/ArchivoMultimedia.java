@@ -33,4 +33,7 @@ public class ArchivoMultimedia {
 
     @Column(name = "tamanio_bytes", nullable = false)
     private long tamanioBytes;
+
+    @Column(name = "thumbnail_base64", columnDefinition = "TEXT")
+    private String thumbnailBase64;
 }

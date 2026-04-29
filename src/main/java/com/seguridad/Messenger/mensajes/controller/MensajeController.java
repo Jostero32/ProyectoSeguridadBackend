@@ -48,11 +48,11 @@ public class MensajeController {
             @ApiResponse(responseCode = "403", description = "No eres participante de la conversación"),
             @ApiResponse(responseCode = "404", description = "Conversación no encontrada")
     })
-    public Page<MensajeResponse> historial(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
-            @Parameter(description = "Número de página, inicia en 0") @RequestParam(defaultValue = "0") @Min(0) int page,
-            @Parameter(description = "Cantidad de mensajes por página (máximo 50)") @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
+        public Page<MensajeResponse> historial(
+                        @AuthenticationPrincipal UserPrincipal principal,
+                        @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
+                        @Parameter(description = "Número de página, inicia en 0") @RequestParam(defaultValue = "0") @Min(0) int page,
+                        @Parameter(description = "Cantidad de mensajes por página (máximo 50)") @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
         return mensajeService.historial(conversacionId, principal.usuarioId(), PageRequest.of(page, size));
     }
 
@@ -112,11 +112,11 @@ public class MensajeController {
             @ApiResponse(responseCode = "403", description = "No eres el autor del mensaje"),
             @ApiResponse(responseCode = "404", description = "Mensaje no encontrado")
     })
-    public MensajeResponse editarMensaje(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
-            @Parameter(description = "ID del mensaje a editar") @PathVariable UUID mensajeId,
-            @Valid @RequestBody EditarMensajeRequest req) {
+        public MensajeResponse editarMensaje(
+                        @AuthenticationPrincipal UserPrincipal principal,
+                        @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
+                        @Parameter(description = "ID del mensaje a editar") @PathVariable UUID mensajeId,
+                        @Valid @RequestBody EditarMensajeRequest req) {
         return mensajeService.editarMensaje(conversacionId, mensajeId, principal.usuarioId(), req);
     }
 
