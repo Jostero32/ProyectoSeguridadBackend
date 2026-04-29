@@ -12,18 +12,25 @@ import com.seguridad.Messenger.mensajes.dto.UbicacionPayload;
 import com.seguridad.Messenger.mensajes.dto.UbicacionResponse;
 import com.seguridad.Messenger.mensajes.model.ArchivoMultimedia;
 import com.seguridad.Messenger.mensajes.model.Mensaje;
+import com.seguridad.Messenger.mensajes.model.Reaccion;
 import com.seguridad.Messenger.mensajes.model.UbicacionMensaje;
 import com.seguridad.Messenger.shared.enums.TipoMensaje;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Component
 public class MensajeMapper {
 
     public MensajeResponse toResponse(Mensaje mensaje) {
         return toResponse(mensaje, null, null, null, null);
+    }
+
+    public MensajeResponse toResponse(Mensaje mensaje, UUID usuarioId) {
+        return toResponse(mensaje, usuarioId, null, null, null);
     }
 
     public MensajeResponse toResponse(
@@ -40,8 +47,9 @@ public class MensajeMapper {
         TipoMensaje tipo = mensaje.getTipo();
 
         RepliedMessageResponse respuesta = mapRespuesta(mensaje.getRespuestaMensaje());
-        List<ResumenReaccionesResponse> reaccionesFinal =
-                reacciones != null ? reacciones : List.of();
+        List<ResumenReaccionesResponse> reaccionesFinal = reacciones != null
+                ? reacciones
+                : buildResumen(mensaje.getReacciones(), usuarioId);
 
         String contenido;
         if (eliminadoParaTodos) {
@@ -104,6 +112,23 @@ public class MensajeMapper {
                 archivo.getTamanioBytes(),
                 archivo.getThumbnailBase64()
         );
+    }
+
+    private List<ResumenReaccionesResponse> buildResumen(List<Reaccion> reacciones, UUID usuarioId) {
+        if (reacciones == null || reacciones.isEmpty()) {
+            return List.of();
+        }
+        Map<String, Long> conteo = reacciones.stream()
+                .collect(Collectors.groupingBy(Reaccion::getEmoji, Collectors.counting()));
+        return conteo.entrySet().stream()
+                .map(e -> new ResumenReaccionesResponse(
+                        e.getKey(),
+                        e.getValue(),
+                        usuarioId != null && reacciones.stream().anyMatch(r ->
+                                r.getId().getUsuarioId().equals(usuarioId)
+                                        && r.getEmoji().equals(e.getKey()))
+                ))
+                .toList();
     }
 
     private UbicacionResponse mapUbicacion(UbicacionMensaje ubicacion) {

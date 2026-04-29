@@ -186,7 +186,7 @@ public class MensajeService {
         mensaje.setEditadoEn(LocalDateTime.now());
         mensaje = mensajeRepository.save(mensaje);
 
-        return mensajeMapper.toResponse(mensaje);
+        return mensajeMapper.toResponse(mensaje, usuarioId);
     }
 
     // ─── Eliminar ─────────────────────────────────────────────────────────────
@@ -240,7 +240,7 @@ public class MensajeService {
     public Page<MensajeResponse> historial(UUID conversacionId, UUID usuarioId, Pageable pageable) {
         verificarParticipante(conversacionId, usuarioId);
         return mensajeRepository.findByConversacion(conversacionId, pageable)
-            .map(mensajeMapper::toResponse);
+            .map(m -> mensajeMapper.toResponse(m, usuarioId));
     }
 
     // ─── Reaccionar (upsert) ──────────────────────────────────────────────────
