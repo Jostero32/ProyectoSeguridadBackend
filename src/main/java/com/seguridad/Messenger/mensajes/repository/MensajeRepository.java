@@ -17,11 +17,21 @@ public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
      * Historial paginado de una conversación.
      * Excluye mensajes eliminados para todos. Ordenado por creado_en DESC.
      */
-    @Query("""
+    @Query(value = """
             SELECT m FROM Mensaje m
+            LEFT JOIN FETCH m.archivo
+            LEFT JOIN FETCH m.ubicacion
+            LEFT JOIN FETCH m.respuestaMensaje
+            LEFT JOIN FETCH m.reenviaDe rd
+            LEFT JOIN FETCH rd.archivo
             WHERE m.conversacion.id = :conversacionId
               AND (m.eliminadoEn IS NULL OR m.eliminadoParaTodos = false)
             ORDER BY m.creadoEn DESC
+            """,
+           countQuery = """
+            SELECT COUNT(m) FROM Mensaje m
+            WHERE m.conversacion.id = :conversacionId
+              AND (m.eliminadoEn IS NULL OR m.eliminadoParaTodos = false)
             """)
     Page<Mensaje> findByConversacion(
             @Param("conversacionId") UUID conversacionId,

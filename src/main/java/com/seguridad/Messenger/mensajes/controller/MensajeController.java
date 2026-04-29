@@ -102,6 +102,27 @@ public class MensajeController {
         catch (NumberFormatException e) { throw new IllegalArgumentException("Coordenada inválida: " + value); }
     }
 
+    @PostMapping("/{mensajeId}/forward")
+    @Operation(summary = "Reenviar mensaje",
+            description = "Reenvía el mensaje a una o más conversaciones donde el usuario sea participante. " +
+                    "Máximo 10 destinos por llamada. Los destinos donde el usuario no es participante se omiten " +
+                    "silenciosamente — el resto se procesa. Si el mensaje ya era un forward, el nuevo apunta " +
+                    "directamente al mensaje raíz original.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lista de mensajes creados en cada destino válido"),
+            @ApiResponse(responseCode = "400", description = "Mensaje eliminado para todos o lista de destinos vacía"),
+            @ApiResponse(responseCode = "403", description = "No eres participante del chat origen"),
+            @ApiResponse(responseCode = "404", description = "Mensaje origen no encontrado")
+    })
+    public List<MensajeResponse> reenviarMensaje(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID de la conversación origen") @PathVariable UUID conversacionId,
+            @Parameter(description = "ID del mensaje a reenviar") @PathVariable UUID mensajeId,
+            @Valid @RequestBody ReenviarMensajeRequest request) {
+        return mensajeService.reenviarMensaje(
+                conversacionId, mensajeId, request.conversacionIds(), principal.usuarioId());
+    }
+
     @PatchMapping("/{mensajeId}")
     @Operation(summary = "Editar mensaje",
             description = "Edita el contenido de un mensaje de texto. Solo el autor puede editar su propio mensaje. " +

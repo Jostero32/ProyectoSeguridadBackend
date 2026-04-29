@@ -35,6 +35,10 @@ public class Mensaje {
     @JoinColumn(name = "respuesta_mensaje_id")
     private Mensaje respuestaMensaje;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reenviado_de_id")
+    private Mensaje reenviaDe;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TipoMensaje tipo;

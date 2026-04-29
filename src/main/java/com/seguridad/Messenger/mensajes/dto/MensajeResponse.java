@@ -44,5 +44,8 @@ public record MensajeResponse(
         List<ResumenReaccionesResponse> reacciones,
 
         @Schema(description = "Payload especifico segun el tipo de mensaje")
-        MensajePayload payload
+        MensajePayload payload,
+
+        @Schema(description = "Datos del mensaje original si este es un reenvío. Null si no es forward.")
+        ForwardResponse reenviaDe
 ) {}

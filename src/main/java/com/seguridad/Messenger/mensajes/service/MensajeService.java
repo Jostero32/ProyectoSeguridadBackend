@@ -1,5 +1,6 @@
 package com.seguridad.Messenger.mensajes.service;
 
+import com.seguridad.Messenger.conversacion.model.Conversacion;
 import com.seguridad.Messenger.conversacion.repository.ConversacionRepository;
 import com.seguridad.Messenger.conversacion.repository.ParticipanteRepository;
 import com.seguridad.Messenger.mensajes.dto.*;
@@ -27,6 +28,7 @@ import com.seguridad.Messenger.websocket.event.EstadoEntregaEvent;
 import com.seguridad.Messenger.websocket.event.MensajeEnviadoEvent;
 import com.seguridad.Messenger.websocket.event.ReaccionEvent;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,10 +38,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -161,6 +165,83 @@ public class MensajeService {
         MensajeResponse response = mensajeMapper.toResponse(mensajeFinal);
         eventPublisher.publishEvent(new MensajeEnviadoEvent(response));
         return response;
+    }
+
+    // ─── Reenviar ─────────────────────────────────────────────────────────────
+
+    /**
+     * Reenvía un mensaje a una o más conversaciones donde el usuario sea participante.
+     * El forward referencia al mensaje raíz original — sin copiar contenido ni archivo.
+     * Si el mensaje a reenviar ya era un forward, el nuevo apunta directamente a la raíz
+     * para evitar cadenas. Los destinos donde el usuario no es participante se omiten
+     * silenciosamente; el resto se procesan.
+     */
+    public List<MensajeResponse> reenviarMensaje(UUID conversacionOrigenId,
+                                                 UUID mensajeId,
+                                                 List<UUID> destinoIds,
+                                                 UUID usuarioId) {
+        verificarParticipante(conversacionOrigenId, usuarioId);
+
+        Mensaje original = mensajeRepository.findById(mensajeId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Mensaje no encontrado"));
+
+        if (!original.getConversacion().getId().equals(conversacionOrigenId)) {
+            throw new RecursoNoEncontradoException("El mensaje no pertenece a esta conversación");
+        }
+        if (original.isEliminadoParaTodos()) {
+            throw new IllegalStateException("No se puede reenviar un mensaje eliminado");
+        }
+
+        Mensaje raiz = original.getReenviaDe() != null ? original.getReenviaDe() : original;
+
+        List<MensajeResponse> resultados = new ArrayList<>();
+
+        for (UUID destinoId : destinoIds) {
+            if (!participanteRepository.existsByIdConversacionIdAndIdUsuarioId(destinoId, usuarioId)) {
+                log.warn("Usuario {} no es participante de {}, omitiendo destino", usuarioId, destinoId);
+                continue;
+            }
+
+            Conversacion destino = conversacionRepository.getReferenceById(destinoId);
+            LocalDateTime ahora = LocalDateTime.now();
+
+            Mensaje forward = new Mensaje();
+            forward.setConversacion(destino);
+            forward.setRemitenteId(usuarioId);
+            forward.setReenviaDe(raiz);
+            forward.setTipo(raiz.getTipo());
+            forward.setContenido(null);
+            forward.setCreadoEn(ahora);
+            forward.setEliminadoParaTodos(false);
+
+            Mensaje guardado = mensajeRepository.save(forward);
+
+            List<UUID> receptores = participanteRepository
+                    .findUsuarioIdsByConversacionExcluyendo(destinoId, usuarioId);
+
+            List<EstadoMensaje> estados = receptores.stream()
+                    .map(receptorId -> {
+                        EstadoMensaje e = new EstadoMensaje();
+                        e.setId(new EstadoMensajeId(guardado.getId(), receptorId));
+                        e.setEntregadoEn(ahora);
+                        return e;
+                    })
+                    .collect(Collectors.toList());
+
+            if (!estados.isEmpty()) {
+                estadoMensajeRepository.saveAll(estados);
+            }
+
+            receptores.forEach(receptorId -> eventPublisher.publishEvent(new EstadoEntregaEvent(
+                    new EstadoEntregaEventPayload(guardado.getId(), destinoId, receptorId, ahora, null)
+            )));
+
+            MensajeResponse response = mensajeMapper.toResponse(guardado, usuarioId);
+            eventPublisher.publishEvent(new MensajeEnviadoEvent(response));
+            resultados.add(response);
+        }
+
+        return resultados;
     }
 
     // ─── Editar ───────────────────────────────────────────────────────────────

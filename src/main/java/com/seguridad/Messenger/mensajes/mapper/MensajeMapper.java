@@ -2,6 +2,7 @@ package com.seguridad.Messenger.mensajes.mapper;
 
 import com.seguridad.Messenger.mensajes.dto.ArchivoMultimediaResponse;
 import com.seguridad.Messenger.mensajes.dto.EstadoMensajeResponse;
+import com.seguridad.Messenger.mensajes.dto.ForwardResponse;
 import com.seguridad.Messenger.mensajes.dto.MensajePayload;
 import com.seguridad.Messenger.mensajes.dto.MensajeResponse;
 import com.seguridad.Messenger.mensajes.dto.MultimediaPayload;
@@ -71,6 +72,8 @@ public class MensajeMapper {
                     new MultimediaPayload(mapArchivo(mensaje.getArchivo()));
             };
 
+        ForwardResponse reenviaDe = mapForward(mensaje.getReenviaDe());
+
         return new MensajeResponse(
                 mensaje.getId(),
                 conversacionIdFinal,
@@ -83,7 +86,28 @@ public class MensajeMapper {
                 respuesta,
                 estados,
                 reaccionesFinal,
-                payload
+                payload,
+                reenviaDe
+        );
+    }
+
+    private ForwardResponse mapForward(Mensaje raiz) {
+        if (raiz == null) return null;
+        boolean borrado = raiz.isEliminadoParaTodos();
+        String urlAcceso = null;
+        String thumbnail = null;
+        if (!borrado && raiz.getArchivo() != null) {
+            urlAcceso = "/archivos/" + raiz.getArchivo().getObjectKey();
+            thumbnail = raiz.getArchivo().getThumbnailBase64();
+        }
+        return new ForwardResponse(
+                raiz.getId(),
+                raiz.getRemitenteId(),
+                raiz.getTipo(),
+                borrado ? null : raiz.getContenido(),
+                urlAcceso,
+                thumbnail,
+                borrado
         );
     }
 
