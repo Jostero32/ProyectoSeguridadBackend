@@ -35,12 +35,16 @@ public class Mensaje {
     @JoinColumn(name = "respuesta_mensaje_id")
     private Mensaje respuestaMensaje;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reenviado_de_id")
+    private Mensaje reenviaDe;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TipoMensaje tipo;
 
-    @Column(name = "contenido_cifrado")
-    private String contenidoCifrado;
+    @Column(name = "contenido")
+    private String contenido;
 
     @Column(name = "creado_en", nullable = false, updatable = false)
     private LocalDateTime creadoEn;

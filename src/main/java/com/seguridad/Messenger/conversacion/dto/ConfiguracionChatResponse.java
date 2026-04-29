@@ -14,6 +14,9 @@ public record ConfiguracionChatResponse(
         LocalDateTime silenciadoHasta,
 
         @Schema(description = "Indica si la conversación está archivada para este usuario")
-        boolean archivado
+        boolean archivado,
+
+        @Schema(description = "Indica si la conversación está fijada al inicio de la lista para este usuario")
+        boolean fijado
 
 ) {}

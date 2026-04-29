@@ -119,10 +119,15 @@ public class StorageService {
 
     /**
      * Genera una presigned URL válida por 1 día para el object_key dado.
+    * MinIO firma usando el endpoint con el que se construyó el cliente — ese hostname
+    * (ej. {@code nginx:9000} dentro de Docker) no es resoluble desde el cliente externo.
+    * Tras firmar, reemplazamos el prefijo por {@code storage.public-url}
+    * (ej. {@code localhost:9000}). En dev local ambos son {@code localhost:9000}
+    * y el replace no cambia nada.
      */
     public String generarPresignedUrl(String objectKey) {
         try {
-            return minioClient.getPresignedObjectUrl(
+            String url = minioClient.getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .bucket(props.getBucket())
                             .object(objectKey)
@@ -130,6 +135,7 @@ public class StorageService {
                             .expiry(PRESIGNED_URL_EXPIRY_DAYS, TimeUnit.DAYS)
                             .build()
             );
+            return url.replace(props.getEndpoint(), props.getPublicUrl());
         } catch (Exception e) {
             throw new RuntimeException("Error generando presigned URL para: " + objectKey, e);
         }

@@ -48,11 +48,11 @@ public class MensajeController {
             @ApiResponse(responseCode = "403", description = "No eres participante de la conversación"),
             @ApiResponse(responseCode = "404", description = "Conversación no encontrada")
     })
-    public Page<MensajeResponse> historial(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
-            @Parameter(description = "Número de página, inicia en 0") @RequestParam(defaultValue = "0") @Min(0) int page,
-            @Parameter(description = "Cantidad de mensajes por página (máximo 50)") @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
+        public Page<MensajeResponse> historial(
+                        @AuthenticationPrincipal UserPrincipal principal,
+                        @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
+                        @Parameter(description = "Número de página, inicia en 0") @RequestParam(defaultValue = "0") @Min(0) int page,
+                        @Parameter(description = "Cantidad de mensajes por página (máximo 50)") @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
         return mensajeService.historial(conversacionId, principal.usuarioId(), PageRequest.of(page, size));
     }
 
@@ -81,10 +81,7 @@ public class MensajeController {
             @Parameter(description = "ID del mensaje al que se responde") @RequestPart(required = false) String respuestaMensajeId,
             @Parameter(description = "Latitud (obligatorio para UBICACION)") @RequestPart(required = false) String latitud,
             @Parameter(description = "Longitud (obligatorio para UBICACION)") @RequestPart(required = false) String longitud,
-            @Parameter(description = "Nombre del lugar (opcional para UBICACION)") @RequestPart(required = false) String nombreLugar,
-            @Parameter(description = "Duración en segundos (opcional para AUDIO/VIDEO)") @RequestPart(required = false) String duracionSegundos,
-            @Parameter(description = "Ancho en píxeles (opcional para IMAGEN/VIDEO)") @RequestPart(required = false) String anchoPx,
-            @Parameter(description = "Alto en píxeles (opcional para IMAGEN/VIDEO)") @RequestPart(required = false) String altoPx) {
+            @Parameter(description = "Nombre del lugar (opcional para UBICACION)") @RequestPart(required = false) String nombreLugar) {
 
         return mensajeService.enviarMensaje(
                 conversacionId,
@@ -93,25 +90,37 @@ public class MensajeController {
                 contenido,
                 respuestaMensajeId != null ? UUID.fromString(respuestaMensajeId) : null,
                 archivo,
-                parseIntOrNull(duracionSegundos),
-                parseIntOrNull(anchoPx),
-                parseIntOrNull(altoPx),
                 parseBigDecimalOrNull(latitud),
                 parseBigDecimalOrNull(longitud),
                 nombreLugar
         );
     }
 
-    private Integer parseIntOrNull(String value) {
-        if (value == null || value.isBlank()) return null;
-        try { return Integer.parseInt(value.trim()); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Valor numérico inválido: " + value); }
-    }
-
     private BigDecimal parseBigDecimalOrNull(String value) {
         if (value == null || value.isBlank()) return null;
         try { return new BigDecimal(value.trim()); }
         catch (NumberFormatException e) { throw new IllegalArgumentException("Coordenada inválida: " + value); }
+    }
+
+    @PostMapping("/{mensajeId}/forward")
+    @Operation(summary = "Reenviar mensaje",
+            description = "Reenvía el mensaje a una o más conversaciones donde el usuario sea participante. " +
+                    "Máximo 10 destinos por llamada. Los destinos donde el usuario no es participante se omiten " +
+                    "silenciosamente — el resto se procesa. Si el mensaje ya era un forward, el nuevo apunta " +
+                    "directamente al mensaje raíz original.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lista de mensajes creados en cada destino válido"),
+            @ApiResponse(responseCode = "400", description = "Mensaje eliminado para todos o lista de destinos vacía"),
+            @ApiResponse(responseCode = "403", description = "No eres participante del chat origen"),
+            @ApiResponse(responseCode = "404", description = "Mensaje origen no encontrado")
+    })
+    public List<MensajeResponse> reenviarMensaje(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(description = "ID de la conversación origen") @PathVariable UUID conversacionId,
+            @Parameter(description = "ID del mensaje a reenviar") @PathVariable UUID mensajeId,
+            @Valid @RequestBody ReenviarMensajeRequest request) {
+        return mensajeService.reenviarMensaje(
+                conversacionId, mensajeId, request.conversacionIds(), principal.usuarioId());
     }
 
     @PatchMapping("/{mensajeId}")
@@ -124,11 +133,11 @@ public class MensajeController {
             @ApiResponse(responseCode = "403", description = "No eres el autor del mensaje"),
             @ApiResponse(responseCode = "404", description = "Mensaje no encontrado")
     })
-    public MensajeResponse editarMensaje(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
-            @Parameter(description = "ID del mensaje a editar") @PathVariable UUID mensajeId,
-            @Valid @RequestBody EditarMensajeRequest req) {
+        public MensajeResponse editarMensaje(
+                        @AuthenticationPrincipal UserPrincipal principal,
+                        @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
+                        @Parameter(description = "ID del mensaje a editar") @PathVariable UUID mensajeId,
+                        @Valid @RequestBody EditarMensajeRequest req) {
         return mensajeService.editarMensaje(conversacionId, mensajeId, principal.usuarioId(), req);
     }
 
@@ -186,22 +195,6 @@ public class MensajeController {
             @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
             @Parameter(description = "ID del mensaje") @PathVariable UUID mensajeId) {
         mensajeService.quitarReaccion(conversacionId, mensajeId, principal.usuarioId());
-    }
-
-    @GetMapping("/{mensajeId}/reacciones")
-    @Operation(summary = "Listar reacciones detalladas",
-            description = "Devuelve la lista completa de reacciones del mensaje con el username de cada usuario, " +
-                    "ordenada por fecha de creación ASC.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Lista de reacciones"),
-            @ApiResponse(responseCode = "403", description = "No eres participante de la conversación"),
-            @ApiResponse(responseCode = "404", description = "Mensaje no encontrado")
-    })
-    public List<ReaccionResponse> listarReacciones(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
-            @Parameter(description = "ID del mensaje") @PathVariable UUID mensajeId) {
-        return mensajeService.listarReacciones(conversacionId, mensajeId, principal.usuarioId());
     }
 
 }

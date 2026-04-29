@@ -37,19 +37,4 @@ public interface ReaccionRepository extends JpaRepository<Reaccion, ReaccionId> 
     @Query("SELECT r FROM Reaccion r WHERE r.id.mensajeId = :mensajeId")
     List<Reaccion> findByMensajeId(@Param("mensajeId") UUID mensajeId);
 
-    /**
-     * Todas las reacciones de un mensaje con usuario cargado en la misma query,
-     * ordenadas por creada_en ASC — para el endpoint de detalle.
-     */
-    @Query("SELECT r FROM Reaccion r JOIN FETCH r.usuario WHERE r.id.mensajeId = :mensajeId ORDER BY r.creadaEn ASC")
-    List<Reaccion> findByMensajeIdConUsuario(@Param("mensajeId") UUID mensajeId);
-
-    /**
-     * Comprueba si un usuario concreto puso un emoji concreto en un mensaje.
-     * Usado al construir el resumen de reacciones (campo {@code reaccionaste}).
-     */
-    @Query("SELECT COUNT(r) > 0 FROM Reaccion r WHERE r.id.mensajeId = :mensajeId AND r.id.usuarioId = :usuarioId AND r.emoji = :emoji")
-    boolean existsByIdMensajeIdAndIdUsuarioIdAndEmoji(@Param("mensajeId") UUID mensajeId,
-                                                      @Param("usuarioId") UUID usuarioId,
-                                                      @Param("emoji") String emoji);
 }

@@ -56,10 +56,6 @@ public class BloqueoService {
         bloqueoRepository.deleteById(id);
     }
 
-    public boolean esBloqueado(UUID usuarioId, UUID bloqueadoId) {
-        return bloqueoRepository.existsById(new BloqueoId(usuarioId, bloqueadoId));
-    }
-
     private BloqueoResponse toResponse(Bloqueo bloqueo) {
         UUID bloqueadoId = bloqueo.getId().getBloqueadoId();
         Usuario usuario = usuarioRepository.findById(bloqueadoId)

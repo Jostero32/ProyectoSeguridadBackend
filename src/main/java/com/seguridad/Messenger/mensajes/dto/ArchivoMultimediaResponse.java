@@ -17,13 +17,7 @@ public record ArchivoMultimediaResponse(
         @Schema(description = "Tamaño en bytes")
         long tamanioBytes,
 
-        @Schema(description = "Duración en segundos (solo para audio/video). Null si no aplica.")
-        Integer duracionSegundos,
-
-        @Schema(description = "Ancho en píxeles (solo para imagen/video). Null si no aplica.")
-        Integer anchoPx,
-
-        @Schema(description = "Alto en píxeles (solo para imagen/video). Null si no aplica.")
-        Integer altoPx
+        @Schema(description = "Thumbnail JPEG 320px en base64 (sin prefijo data:image). Null para tipos distintos a IMAGEN o si falló la generación.")
+        String thumbnailBase64
 
 ) {}

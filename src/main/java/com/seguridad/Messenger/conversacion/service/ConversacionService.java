@@ -276,7 +276,7 @@ public class ConversacionService {
         return configuracionChatRepository
                 .findByIdConversacionIdAndIdUsuarioId(conversacionId, usuarioId)
                 .map(this::toConfiguracionResponse)
-                .orElse(new ConfiguracionChatResponse(false, null, false));
+                .orElse(new ConfiguracionChatResponse(false, null, false, false));
     }
 
     public ConfiguracionChatResponse actualizarConfiguracion(UUID conversacionId, UUID usuarioId,
@@ -299,6 +299,9 @@ public class ConversacionService {
         config.setSilenciadoHasta(req.silenciadoHasta());
         if (req.archivado() != null) {
             config.setArchivado(req.archivado());
+        }
+        if (req.fijado() != null) {
+            config.setFijado(req.fijado());
         }
 
         config = configuracionChatRepository.save(config);
@@ -388,7 +391,7 @@ public class ConversacionService {
     private String generarPreview(Mensaje m) {
         if (m.isEliminadoParaTodos()) return "Mensaje eliminado";
         return switch (m.getTipo()) {
-            case TEXTO     -> truncar(m.getContenidoCifrado(), 60);
+            case TEXTO     -> truncar(m.getContenido(), 60);
             case IMAGEN    -> "Foto";
             case VIDEO     -> "Video";
             case AUDIO     -> "Audio";
@@ -441,6 +444,7 @@ public class ConversacionService {
     private ConfiguracionChatResponse toConfiguracionResponse(ConfiguracionChat config) {
         boolean silenciado = config.getSilenciadoHasta() != null
                 && config.getSilenciadoHasta().isAfter(LocalDateTime.now());
-        return new ConfiguracionChatResponse(silenciado, config.getSilenciadoHasta(), config.isArchivado());
+        return new ConfiguracionChatResponse(
+                silenciado, config.getSilenciadoHasta(), config.isArchivado(), config.isFijado());
     }
 }
