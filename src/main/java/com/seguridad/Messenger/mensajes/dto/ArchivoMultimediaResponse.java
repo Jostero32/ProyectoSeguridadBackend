@@ -15,15 +15,6 @@ public record ArchivoMultimediaResponse(
         String contentType,
 
         @Schema(description = "Tamaño en bytes")
-        long tamanioBytes,
-
-        @Schema(description = "Duración en segundos (solo para audio/video). Null si no aplica.")
-        Integer duracionSegundos,
-
-        @Schema(description = "Ancho en píxeles (solo para imagen/video). Null si no aplica.")
-        Integer anchoPx,
-
-        @Schema(description = "Alto en píxeles (solo para imagen/video). Null si no aplica.")
-        Integer altoPx
+        long tamanioBytes
 
 ) {}

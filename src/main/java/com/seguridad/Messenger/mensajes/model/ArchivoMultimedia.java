@@ -33,13 +33,4 @@ public class ArchivoMultimedia {
 
     @Column(name = "tamanio_bytes", nullable = false)
     private long tamanioBytes;
-
-    @Column(name = "duracion_segundos")
-    private Integer duracionSegundos;
-
-    @Column(name = "ancho_px")
-    private Integer anchoPx;
-
-    @Column(name = "alto_px")
-    private Integer altoPx;
 }

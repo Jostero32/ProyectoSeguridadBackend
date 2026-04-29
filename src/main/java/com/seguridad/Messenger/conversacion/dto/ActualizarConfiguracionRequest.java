@@ -11,6 +11,9 @@ public record ActualizarConfiguracionRequest(
         LocalDateTime silenciadoHasta,
 
         @Schema(description = "Archivar o desarchivar la conversación. Null para no modificar el estado actual.")
-        Boolean archivado
+        Boolean archivado,
+
+        @Schema(description = "Fijar o desfijar la conversación al inicio de la lista. Null para no modificar el estado actual.")
+        Boolean fijado
 
 ) {}

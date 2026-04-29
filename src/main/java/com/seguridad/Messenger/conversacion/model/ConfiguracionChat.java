@@ -32,4 +32,7 @@ public class ConfiguracionChat {
 
     @Column(nullable = false)
     private boolean archivado = false;
+
+    @Column(nullable = false)
+    private boolean fijado = false;
 }

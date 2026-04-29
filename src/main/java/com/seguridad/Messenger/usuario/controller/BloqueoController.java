@@ -65,12 +65,4 @@ public class BloqueoController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/{bloqueadoId}")
-    @Operation(summary = "Verificar si un usuario está bloqueado")
-    @ApiResponse(responseCode = "200", description = "true si está bloqueado, false si no")
-    public ResponseEntity<Boolean> esBloqueado(
-            @Parameter(description = "ID del usuario a verificar") @PathVariable UUID bloqueadoId,
-            @AuthenticationPrincipal UserPrincipal principal) {
-        return ResponseEntity.ok(bloqueoService.esBloqueado(principal.usuarioId(), bloqueadoId));
-    }
 }

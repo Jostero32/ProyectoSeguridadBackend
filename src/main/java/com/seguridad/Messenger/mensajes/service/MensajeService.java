@@ -59,9 +59,6 @@ public class MensajeService {
                                          String contenido,
                                          UUID respuestaMensajeId,
                                          MultipartFile archivo,
-                                         Integer duracionSegundos,
-                                         Integer anchoPx,
-                                         Integer altoPx,
                                          BigDecimal latitud,
                                          BigDecimal longitud,
                                          String nombreLugar) {
@@ -99,7 +96,7 @@ public class MensajeService {
         mensaje.setEliminadoParaTodos(false);
 
         if (tipo == TipoMensaje.TEXTO) {
-            mensaje.setContenidoCifrado(contenido);
+            mensaje.setContenido(contenido);
         }
 
         final Mensaje mensajeGuardado = mensajeRepository.save(mensaje);
@@ -112,9 +109,6 @@ public class MensajeService {
             am.setObjectKey(result.objectKey());
             am.setContentType(result.contentType());
             am.setTamanioBytes(result.tamanioBytes());
-            am.setDuracionSegundos(duracionSegundos);
-            am.setAnchoPx(anchoPx);
-            am.setAltoPx(altoPx);
             mensajeGuardado.setArchivo(am);
         }
 
@@ -175,7 +169,7 @@ public class MensajeService {
             throw new IllegalStateException("Solo se pueden editar mensajes de tipo texto");
         }
 
-        mensaje.setContenidoCifrado(req.contenido());
+        mensaje.setContenido(req.contenido());
         mensaje.setEditadoEn(LocalDateTime.now());
         mensaje = mensajeRepository.save(mensaje);
 
@@ -285,24 +279,6 @@ public class MensajeService {
         ));
     }
 
-    // ─── Listar reacciones detalladas ─────────────────────────────────────────
-
-    @Transactional(readOnly = true)
-    public List<ReaccionResponse> listarReacciones(UUID conversacionId, UUID mensajeId, UUID usuarioId) {
-        verificarParticipante(conversacionId, usuarioId);
-
-        Mensaje mensaje = cargarMensaje(mensajeId);
-        verificarMensajeEnConversacion(mensaje, conversacionId);
-
-        return reaccionRepository.findByMensajeIdConUsuario(mensajeId).stream()
-                .map(r -> new ReaccionResponse(
-                        r.getId().getUsuarioId(),
-                        r.getUsuario().getUsername(),
-                        r.getEmoji(),
-                        r.getCreadaEn()))
-                .toList();
-    }
-
     // ─── Helpers privados ─────────────────────────────────────────────────────
 
     private void verificarParticipante(UUID conversacionId, UUID usuarioId) {
@@ -365,9 +341,9 @@ public class MensajeService {
         if (mensaje.isEliminadoParaTodos()) {
             contenido = null;
         } else if (mensaje.getEliminadoEn() != null) {
-            contenido = mensaje.getRemitenteId().equals(usuarioId) ? null : mensaje.getContenidoCifrado();
+            contenido = mensaje.getRemitenteId().equals(usuarioId) ? null : mensaje.getContenido();
         } else {
-            contenido = mensaje.getContenidoCifrado();
+            contenido = mensaje.getContenido();
         }
 
         boolean eliminado = mensaje.getEliminadoEn() != null;
@@ -379,7 +355,7 @@ public class MensajeService {
             respuesta = new RepliedMessageResponse(
                     original.getId(),
                     original.getRemitenteId(),
-                    original.isEliminadoParaTodos() ? null : original.getContenidoCifrado(),
+                    original.isEliminadoParaTodos() ? null : original.getContenido(),
                     original.getEliminadoEn() != null
             );
         }
@@ -403,10 +379,7 @@ public class MensajeService {
                     "/archivos/" + am.getObjectKey(),
                     am.getNombreOriginal(),
                     am.getContentType(),
-                    am.getTamanioBytes(),
-                    am.getDuracionSegundos(),
-                    am.getAnchoPx(),
-                    am.getAltoPx()
+                    am.getTamanioBytes()
             );
         }
 

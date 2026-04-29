@@ -81,10 +81,7 @@ public class MensajeController {
             @Parameter(description = "ID del mensaje al que se responde") @RequestPart(required = false) String respuestaMensajeId,
             @Parameter(description = "Latitud (obligatorio para UBICACION)") @RequestPart(required = false) String latitud,
             @Parameter(description = "Longitud (obligatorio para UBICACION)") @RequestPart(required = false) String longitud,
-            @Parameter(description = "Nombre del lugar (opcional para UBICACION)") @RequestPart(required = false) String nombreLugar,
-            @Parameter(description = "Duración en segundos (opcional para AUDIO/VIDEO)") @RequestPart(required = false) String duracionSegundos,
-            @Parameter(description = "Ancho en píxeles (opcional para IMAGEN/VIDEO)") @RequestPart(required = false) String anchoPx,
-            @Parameter(description = "Alto en píxeles (opcional para IMAGEN/VIDEO)") @RequestPart(required = false) String altoPx) {
+            @Parameter(description = "Nombre del lugar (opcional para UBICACION)") @RequestPart(required = false) String nombreLugar) {
 
         return mensajeService.enviarMensaje(
                 conversacionId,
@@ -93,19 +90,10 @@ public class MensajeController {
                 contenido,
                 respuestaMensajeId != null ? UUID.fromString(respuestaMensajeId) : null,
                 archivo,
-                parseIntOrNull(duracionSegundos),
-                parseIntOrNull(anchoPx),
-                parseIntOrNull(altoPx),
                 parseBigDecimalOrNull(latitud),
                 parseBigDecimalOrNull(longitud),
                 nombreLugar
         );
-    }
-
-    private Integer parseIntOrNull(String value) {
-        if (value == null || value.isBlank()) return null;
-        try { return Integer.parseInt(value.trim()); }
-        catch (NumberFormatException e) { throw new IllegalArgumentException("Valor numérico inválido: " + value); }
     }
 
     private BigDecimal parseBigDecimalOrNull(String value) {
@@ -186,22 +174,6 @@ public class MensajeController {
             @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
             @Parameter(description = "ID del mensaje") @PathVariable UUID mensajeId) {
         mensajeService.quitarReaccion(conversacionId, mensajeId, principal.usuarioId());
-    }
-
-    @GetMapping("/{mensajeId}/reacciones")
-    @Operation(summary = "Listar reacciones detalladas",
-            description = "Devuelve la lista completa de reacciones del mensaje con el username de cada usuario, " +
-                    "ordenada por fecha de creación ASC.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Lista de reacciones"),
-            @ApiResponse(responseCode = "403", description = "No eres participante de la conversación"),
-            @ApiResponse(responseCode = "404", description = "Mensaje no encontrado")
-    })
-    public List<ReaccionResponse> listarReacciones(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Parameter(description = "ID de la conversación") @PathVariable UUID conversacionId,
-            @Parameter(description = "ID del mensaje") @PathVariable UUID mensajeId) {
-        return mensajeService.listarReacciones(conversacionId, mensajeId, principal.usuarioId());
     }
 
 }

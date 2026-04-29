@@ -39,8 +39,8 @@ public class Mensaje {
     @Column(nullable = false)
     private TipoMensaje tipo;
 
-    @Column(name = "contenido_cifrado")
-    private String contenidoCifrado;
+    @Column(name = "contenido")
+    private String contenido;
 
     @Column(name = "creado_en", nullable = false, updatable = false)
     private LocalDateTime creadoEn;
